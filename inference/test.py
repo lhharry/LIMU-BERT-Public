@@ -112,6 +112,11 @@ def main() -> None:
         raise ValueError("Unable to load motion_20_120 dataset configuration.")
 
     label_names, label_num = load_dataset_label_names(dataset_cfg, 0)
+    print(f"Dataset: motion_20_120, Features: {args.feature_count}, Classes: {label_num}")
+    #print the first 10 line of the raw data file
+    with np.load(input_path) as data_file:
+        print("First 10 lines of raw data:")
+        print(data_file[:10])
     data = load_sequence_data(input_path, args.feature_count)
     print(f"Loaded data from {input_path} with shape {data.shape}.")
     data = normalize_sequence_data(data, args.feature_count)
