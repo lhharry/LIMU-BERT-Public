@@ -5,13 +5,16 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 from config import load_dataset_label_names, load_dataset_stats, load_model_config
 from models import LIMUBertModel4Pretrain, fetch_classifier
 from utils import Preprocess4Normalization
 
 
-DEFAULT_DATA_PATH = Path("dataset/motion/data_20_120.npy")
-DEFAULT_LABEL_PATH = Path("dataset/motion/label_20_120.npy")
+DEFAULT_DATA_PATH = Path("dataprep/data_20_120.npy")
+DEFAULT_LABEL_PATH = Path("dataprep/label_20_120.npy")
 DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_motion_20_120/motion.pt")
 DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_motion_20_120/motion.pt")
 
@@ -113,10 +116,16 @@ def main() -> None:
 
     label_names, label_num = load_dataset_label_names(dataset_cfg, 0)
     print(f"Dataset: motion_20_120, Features: {args.feature_count}, Classes: {label_num}")
-    #print the first 10 line of the raw data file
-    with np.load(input_path) as data_file:
-        print("First 10 lines of raw data:")
-        print(data_file[:10])
+    # Print the first 10 entries from raw data for a quick sanity check.
+    raw_loaded = np.load(input_path)
+    print("First 10 lines of raw data:")
+    if isinstance(raw_loaded, np.lib.npyio.NpzFile):
+        first_key = raw_loaded.files[0]
+        print(f"Loaded npz key: {first_key}")
+        print(raw_loaded[first_key][:10])
+        raw_loaded.close()
+    else:
+        print(raw_loaded[:10])
     data = load_sequence_data(input_path, args.feature_count)
     print(f"Loaded data from {input_path} with shape {data.shape}.")
     data = normalize_sequence_data(data, args.feature_count)

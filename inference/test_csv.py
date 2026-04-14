@@ -6,12 +6,15 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 from config import load_dataset_label_names, load_dataset_stats, load_model_config
 from models import LIMUBertModel4Pretrain, fetch_classifier
 from utils import Preprocess4Normalization
 
 
-DEFAULT_CSV_PATH = Path("imu_log_300s_corrected.csv")
+DEFAULT_CSV_PATH = Path("inference/imu_log_300s_corrected.csv")
 DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_motion_20_120/motion.pt")
 DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_motion_20_120/motion.pt")
 
