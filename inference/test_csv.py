@@ -222,8 +222,8 @@ def main() -> None:
         default=None,
         help="Comma-separated feature columns in desired order (overrides --sensor)",
     )
-    parser.add_argument("--window-size", type=int, default=None, help="Sliding window size; default uses model seq_len")
-    parser.add_argument("--stride", type=int, default=None, help="Sliding window stride; default equals window_size")
+    parser.add_argument("--window-size", type=int, default=20, help="Sliding window size; default uses model seq_len")
+    parser.add_argument("--stride", type=int, default=20, help="Sliding window stride; default equals window_size")
     parser.add_argument("--feature-count", type=int, default=6, help="Number of sensor features expected by model")
     parser.add_argument("--batch-size", type=int, default=128, help="Inference batch size")
     parser.add_argument("--classifier-version", type=str, default="v2", choices=["v1", "v2"])
