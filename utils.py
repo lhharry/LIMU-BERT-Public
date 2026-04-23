@@ -390,7 +390,7 @@ class LIBERTDataset4Pretrain(Dataset):
 def handle_argv(target, config_train, prefix):
     parser = argparse.ArgumentParser(description='PyTorch LIMU-BERT Model')
     parser.add_argument('model_version', type=str, help='Model config')
-    parser.add_argument('dataset', type=str, help='Dataset name', choices=['hhar', 'motion', 'uci', 'shoaib'])
+    parser.add_argument('dataset', type=str, help='Dataset name', choices=['hhar', 'motion', 'uci', 'shoaib', 'camargo'])
     parser.add_argument('dataset_version',  type=str, help='Dataset version', choices=['10_100', '20_120'])
     parser.add_argument('-g', '--gpu', type=str, default=None, help='Set specific GPU')
     parser.add_argument('-f', '--model_file', type=str, default=None, help='Pretrain model file')
@@ -424,7 +424,7 @@ def handle_argv(target, config_train, prefix):
 def handle_argv_simple():
     parser = argparse.ArgumentParser(description='PyTorch LIMU-BERT Model')
     parser.add_argument('model_file', type=str, default=None, help='Pretrain model file')
-    parser.add_argument('dataset', type=str, help='Dataset name', choices=['hhar', 'motion', 'uci', 'shoaib','merge'])
+    parser.add_argument('dataset', type=str, help='Dataset name', choices=['hhar', 'motion', 'uci', 'shoaib', 'camargo', 'merge'])
     parser.add_argument('dataset_version',  type=str, help='Dataset version', choices=['10_100', '20_120'])
     args = parser.parse_args()
     dataset_cfg = load_dataset_stats(args.dataset, args.dataset_version)

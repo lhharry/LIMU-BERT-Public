@@ -57,6 +57,26 @@
         "user_label_index": 2,
         "user_label_size": 10,
         "size": 10500
+    },
+    "camargo_20_120": {
+    "sr": 20,
+    "seq_len": 120,
+    "dimension": 6,
+    "activity_label_index": 0,
+    "activity_label_size": 20,
+    "activity_label": [
+        "idle", "stand", "stand-walk", "walk", "walk-stand",
+        "turn1", "turn2", "jog",
+        "rampascent", "walk-rampascent", "rampascent-walk",
+        "rampdescent", "walk-rampdescent", "rampdescent-walk",
+        "stairascent", "walk-stairascent", "stairascent-walk",
+        "stairdescent", "walk-stairdescent", "stairdescent-walk"
+    ],
+    "user_label_index": 1,
+    "user_label_size": 24,
+    "model_label_index": -1,
+    "model_label_size": 0,
+    "size": 101533
     }
 }
 

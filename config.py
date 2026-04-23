@@ -135,10 +135,15 @@ def create_io_config(args, dataset_name, version, pretrain_model=None, target='p
     # args.log_dir = log_path
 
     if pretrain_model is not None:
-        if target.count('_') > 2: # bert_classifier
+        # Support explicit model path in addition to legacy saved-folder lookup.
+        if os.path.isabs(pretrain_model) or os.path.sep in pretrain_model or '/' in pretrain_model:
+            model_path = pretrain_model
+        elif target.count('_') > 2: # bert_classifier
             model_path = os.path.join('saved', 'pretrain_' + target.split('_')[2] + "_" + dataset_name + "_" + version, pretrain_model)
         else:
             model_path = os.path.join(save_path, pretrain_model)
+        if model_path.endswith('.pt'):
+            model_path = model_path[:-3]
         args.pretrain_model = model_path
     else:
         args.pretrain_model = None
