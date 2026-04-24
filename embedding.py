@@ -21,6 +21,10 @@ from utils import LIBERTDataset4Pretrain, load_pretrain_data_config, get_device,
 
 def fetch_setup(args, output_embed):
     data, labels, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
+    if data.shape[1] != model_cfg.seq_len:
+        merge = data.shape[1] // model_cfg.seq_len
+        data = data.reshape(data.shape[0] * merge, model_cfg.seq_len, data.shape[2])
+        labels = labels.reshape(labels.shape[0] * merge, model_cfg.seq_len, labels.shape[2])
     pipeline = [Preprocess4Normalization(model_cfg.feature_num)]
     data_set = IMUDataset(data, labels, pipeline=pipeline)
     data_loader = DataLoader(data_set, shuffle=False, batch_size=train_cfg.batch_size)
