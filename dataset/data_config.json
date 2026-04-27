@@ -63,9 +63,9 @@
     "seq_len": 120,
     "dimension": 6,
     "activity_label_index": 0,
-    "activity_label_size": 20,
+    "activity_label_size": 19,
     "activity_label": [
-        "idle", "stand", "stand-walk", "walk", "walk-stand",
+        "stand", "stand-walk", "walk", "walk-stand",
         "turn1", "turn2", "jog",
         "rampascent", "walk-rampascent", "rampascent-walk",
         "rampdescent", "walk-rampdescent", "rampdescent-walk",
@@ -76,7 +76,7 @@
     "user_label_size": 24,
     "model_label_index": -1,
     "model_label_size": 0,
-    "size": 101533
+    "size": 83200
     }
 }
 

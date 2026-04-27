@@ -62,6 +62,7 @@ class TrainConfig(NamedTuple):
     """ Hyperparameters for training """
     seed: int = 0  # random seed
     batch_size: int = 0
+    num_workers: int = 0
     lr: int = 0  # learning rate
     n_epochs: int = 0  # the number of epoch
     # `warm up` period = warmup(0.1)*total_steps

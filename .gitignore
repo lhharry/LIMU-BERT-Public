@@ -17,3 +17,7 @@ dataset/camargo/label_20_120.npy
 
 # Local training checkpoints
 saved/bert_classifier_base_gru_camargo_20_120/
+
+# Camargo+idle generated arrays (too large for normal Git hosting)
+dataset/camargo_ink_idle/data_20_120.npy
+dataset/camargo_ink_idle/label_20_120.npy

@@ -6,6 +6,7 @@
 # @File    : classifier.py
 # @Description :
 import argparse
+import os
 
 import numpy as np
 import torch
@@ -68,8 +69,8 @@ def classify_embeddings(args, data, labels, label_index, training_rate, label_ra
 if __name__ == "__main__":
 
     training_rate = 0.8 # unlabeled sample / total sample
-    label_rate = 0.01 # labeled sample / unlabeled sample
-    balance = True
+    label_rate = 0.9 # labeled sample / unlabeled sample
+    balance = False
 
     mode = "base"
     method = "gru"

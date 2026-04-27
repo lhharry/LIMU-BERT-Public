@@ -101,7 +101,7 @@ class Trainer(object):
             return torch.cat(results, 0).cpu().numpy()
 
     def train(self, func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
-              , model_file=None, data_parallel=False, load_self=False):
+              , model_file=None, data_parallel=False, load_self=False, scheduler=None, early_stop_patience=None):
         """ Train Loop """
         self.load(model_file, load_self)
         model = self.model.to(self.device)
@@ -112,6 +112,9 @@ class Trainer(object):
         vali_acc_best = 0.0
         best_stat = None
         model_best = model.state_dict()
+        eval_every = 10
+        vali_f1_best = 0.0      # for early stopping
+        no_improve_count = 0    # consecutive eval epochs without vali_f1 improvement
         for e in range(self.cfg.n_epochs):
             loss_sum = 0.0 # the sum of iteration losses to get average loss in every epoch
             time_sum = 0.0
@@ -133,20 +136,43 @@ class Trainer(object):
                 if self.cfg.total_steps and self.cfg.total_steps < global_step:
                     print('The Total Steps have been reached.')
                     return
-            train_acc, train_f1 = self.run(func_forward, func_evaluate, data_loader_train)
-            test_acc, test_f1 = self.run(func_forward, func_evaluate, data_loader_test)
-            vali_acc, vali_f1 = self.run(func_forward, func_evaluate, data_loader_vali)
-            print('Epoch %d/%d : Average Loss %5.4f, Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f'
-                  % (e+1, self.cfg.n_epochs, loss_sum / len(data_loader_train), train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1))
-            # print("Train execution time: %.5f seconds" % (time_sum / len(self.data_loader)))
-            if vali_acc > vali_acc_best:
-                vali_acc_best = vali_acc
-                best_stat = (train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1)
-                model_best = copy.deepcopy(model.state_dict())
-                self.save(0)
+
+            # step LR scheduler every epoch
+            if scheduler is not None:
+                scheduler.step()
+
+            is_eval_epoch = ((e + 1) % eval_every == 0) or (e + 1 == self.cfg.n_epochs)
+            if is_eval_epoch:
+                train_acc, train_f1 = self.run(func_forward, func_evaluate, data_loader_train)
+                test_acc, test_f1 = self.run(func_forward, func_evaluate, data_loader_test)
+                vali_acc, vali_f1 = self.run(func_forward, func_evaluate, data_loader_vali)
+                print('Epoch %d/%d : Average Loss %5.4f, Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f'
+                      % (e+1, self.cfg.n_epochs, loss_sum / len(data_loader_train), train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1))
+                if vali_acc > vali_acc_best:
+                    vali_acc_best = vali_acc
+                    best_stat = (train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1)
+                    model_best = copy.deepcopy(model.state_dict())
+                    self.save(0)
+                # early stopping: track vali_f1
+                if early_stop_patience is not None:
+                    if vali_f1 > vali_f1_best:
+                        vali_f1_best = vali_f1
+                        no_improve_count = 0
+                    else:
+                        no_improve_count += 1
+                    if no_improve_count >= early_stop_patience:
+                        print('Early stopping at epoch %d (no vali F1 improvement for %d evaluations).'
+                              % (e + 1, early_stop_patience))
+                        break
+            else:
+                print('Epoch %d/%d : Average Loss %5.4f (skip evaluation)'
+                      % (e + 1, self.cfg.n_epochs, loss_sum / len(data_loader_train)))
         self.model.load_state_dict(model_best)
         print('The Total Epoch have been reached.')
-        print('Best Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f' % best_stat)
+        if best_stat is not None:
+            print('Best Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f' % best_stat)
+        else:
+            print('No evaluation epoch was run, so no best metric is available.')
 
     def load(self, model_file, load_self=False):
         """ load saved model or pretrained transformer (a part of model) """

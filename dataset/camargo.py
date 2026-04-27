@@ -16,7 +16,7 @@ import pandas as pd
 
 SAMPLE_WINDOW = 20
 DATASET_PATH = r'D:\01_Code\DATA\OpenSource\AY_Camargo'
-ACTIVITY_NAMES = ["idle", "stand", "stand-walk", "walk", "walk-stand",
+ACTIVITY_NAMES = ["stand", "stand-walk", "walk", "walk-stand",
                   "turn1", "turn2", "jog",
                   "rampascent", "walk-rampascent", "rampascent-walk",
                   "rampdescent", "walk-rampdescent", "rampdescent-walk",
