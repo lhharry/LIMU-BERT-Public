@@ -1,4 +1,3 @@
-import argparse
 from pathlib import Path
 
 import numpy as np
@@ -15,8 +14,27 @@ from utils import Preprocess4Normalization
 
 
 DEFAULT_CSV_PATH = Path("inference/imu_log_300s_corrected.csv")
-DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_motion_20_120/motion.pt")
-DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_motion_20_120/motion.pt")
+DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_camargo_10_20/limu_bert_x.pt")
+DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_camargo_10_20/bertx_gru_v2.pt")
+
+# Single-mode debug config for direct VS Code Run/Debug.
+DEBUG_CONFIG = {
+    "csv_path": DEFAULT_CSV_PATH,
+    "dataset": "camargo",
+    "dataset_version": "10_20",
+    "delimiter": ";",
+    "sensor": "left",
+    "feature_columns": None,
+    "window_size": 20,
+    "stride": 20,
+    "feature_count": 6,
+    "batch_size": 128,
+    "classifier_version": "v2",
+    "pretrain_model": DEFAULT_PRETRAIN_MODEL,
+    "classifier_model": DEFAULT_CLASSIFIER_MODEL,
+    "label_path": None,
+    "output": None,
+}
 
 
 def parse_feature_columns(columns_arg: str | None) -> list[str] | None:
@@ -204,50 +222,22 @@ def load_labels(label_path: Path | None) -> np.ndarray | None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Predict activity labels from IMU CSV data.")
-    parser.add_argument("csv_path", nargs="?", default=str(DEFAULT_CSV_PATH), help="Path to IMU CSV file")
-    parser.add_argument("--dataset", type=str, default="motion", choices=["hhar", "motion", "uci", "shoaib"])
-    parser.add_argument("--dataset-version", type=str, default="20_120", choices=["10_100", "20_120"])
-    parser.add_argument("--delimiter", type=str, default=";", help="CSV delimiter")
-    parser.add_argument(
-        "--sensor",
-        type=str,
-        default="left",
-        choices=["left", "right", "average", "generic"],
-        help="Sensor columns to use when --feature-columns is not provided",
-    )
-    parser.add_argument(
-        "--feature-columns",
-        type=str,
-        default=None,
-        help="Comma-separated feature columns in desired order (overrides --sensor)",
-    )
-    parser.add_argument("--window-size", type=int, default=20, help="Sliding window size; default uses model seq_len")
-    parser.add_argument("--stride", type=int, default=20, help="Sliding window stride; default equals window_size")
-    parser.add_argument("--feature-count", type=int, default=6, help="Number of sensor features expected by model")
-    parser.add_argument("--batch-size", type=int, default=128, help="Inference batch size")
-    parser.add_argument("--classifier-version", type=str, default="v2", choices=["v1", "v2"])
-    parser.add_argument("--pretrain-model", type=str, default=str(DEFAULT_PRETRAIN_MODEL))
-    parser.add_argument("--classifier-model", type=str, default=str(DEFAULT_CLASSIFIER_MODEL))
-    parser.add_argument("--label-path", type=str, default=None, help="Optional .npy labels for evaluation")
-    parser.add_argument("--output", type=str, default=None, help="Optional path to save predictions (.npy)")
-    args = parser.parse_args()
-
-    csv_path = Path(args.csv_path)
-    dataset_cfg = load_dataset_stats(args.dataset, args.dataset_version)
+    cfg = DEBUG_CONFIG
+    csv_path = Path(cfg["csv_path"])
+    dataset_cfg = load_dataset_stats(cfg["dataset"], cfg["dataset_version"])
     if dataset_cfg is None:
-        raise ValueError(f"Unable to load dataset config: {args.dataset}_{args.dataset_version}")
+        raise ValueError(f"Unable to load dataset config: {cfg['dataset']}_{cfg['dataset_version']}")
 
     label_names, label_num = load_dataset_label_names(dataset_cfg, 0)
     if label_num <= 0:
         raise ValueError("Unable to resolve number of classes for label index 0.")
 
-    feature_columns = parse_feature_columns(args.feature_columns)
+    feature_columns = parse_feature_columns(cfg["feature_columns"])
     flat_features, df, columns_used = load_csv_features(
         csv_path=csv_path,
-        delimiter=args.delimiter,
-        sensor=args.sensor,
-        feature_count=args.feature_count,
+        delimiter=cfg["delimiter"],
+        sensor=cfg["sensor"],
+        feature_count=cfg["feature_count"],
         feature_columns=feature_columns,
     )
 
@@ -255,19 +245,19 @@ def main() -> None:
     pretrain_model, classifier_model, pretrain_cfg = build_models(
         device=device,
         label_num=label_num,
-        classifier_version=args.classifier_version,
-        pretrain_model_path=Path(args.pretrain_model),
-        classifier_model_path=Path(args.classifier_model),
+        classifier_version=cfg["classifier_version"],
+        pretrain_model_path=Path(cfg["pretrain_model"]),
+        classifier_model_path=Path(cfg["classifier_model"]),
     )
 
-    window_size = args.window_size if args.window_size is not None else pretrain_cfg.seq_len
-    stride = args.stride if args.stride is not None else window_size
+    window_size = cfg["window_size"] if cfg["window_size"] is not None else pretrain_cfg.seq_len
+    stride = cfg["stride"] if cfg["stride"] is not None else window_size
 
     data = window_features(flat_features, window_size=window_size, stride=stride)
-    data = normalize_sequence_data(data, args.feature_count)
-    predictions = predict(data, pretrain_model, classifier_model, args.batch_size, device)
+    data = normalize_sequence_data(data, cfg["feature_count"])
+    predictions = predict(data, pretrain_model, classifier_model, cfg["batch_size"], device)
 
-    labels = load_labels(Path(args.label_path)) if args.label_path else None
+    labels = load_labels(Path(cfg["label_path"])) if cfg["label_path"] else None
 
     print("=== CSV Inference Summary ===")
     print(f"CSV file: {csv_path}")
@@ -275,7 +265,7 @@ def main() -> None:
     print(f"Columns used ({len(columns_used)}): {columns_used}")
     print(f"Window size: {window_size}, stride: {stride}, windows: {data.shape[0]}")
     print(f"Input tensor shape: {data.shape}")
-    print(f"Dataset config: {args.dataset}_{args.dataset_version}")
+    print(f"Dataset config: {cfg['dataset']}_{cfg['dataset_version']}")
     print(f"Classes: {label_num}")
     if label_names:
         print(f"Label names: {label_names}")
@@ -300,11 +290,11 @@ def main() -> None:
             )
         else:
             accuracy = float(np.mean(predictions == labels))
-            print(f"\nAccuracy against {args.label_path}: {accuracy:.4f}")
+            print(f"\nAccuracy against {cfg['label_path']}: {accuracy:.4f}")
 
-    if args.output:
-        np.save(args.output, predictions)
-        print(f"Saved predictions to: {args.output}")
+    if cfg["output"]:
+        np.save(cfg["output"], predictions)
+        print(f"Saved predictions to: {cfg['output']}")
 
 
 if __name__ == "__main__":

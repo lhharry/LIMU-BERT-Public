@@ -41,7 +41,7 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
     # criterion = nn.CrossEntropyLoss()  # original: no class weighting
     device = get_device(args.gpu)
     class_counts = np.bincount(label_train.flatten().astype(int), minlength=label_num)
-    weights = 1.0 / (class_counts.astype(float) + 1e-6)
+    weights = 1.0 / (class_counts.astype(float) + 1.0)  # Laplace smoothing for empty classes
     weights = weights / weights.sum() * label_num
     criterion = nn.CrossEntropyLoss(weight=torch.tensor(weights, dtype=torch.float).to(device))
 
@@ -51,7 +51,7 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
     # scheduler = None  # original: fixed LR
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_cfg.n_epochs)  # single cycle, LR→0 at end
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=100, T_mult=1, eta_min=1e-5
+        optimizer, T_0=50, T_mult=1, eta_min=1e-5
     )
     # trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, get_device(args.gpu))  # original
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
@@ -74,7 +74,7 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
     # trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
     #                     , model_file=args.pretrain_model, load_self=True)  # original: no scheduler, no early stopping
     trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
-                        , model_file=args.pretrain_model, load_self=True, scheduler=scheduler, early_stop_patience=20)
+                        , model_file=args.pretrain_model, load_self=True, scheduler=scheduler, early_stop_patience=5)
     label_estimate_test = trainer.run(func_forward, None, data_loader_test)
     return label_test, label_estimate_test
 

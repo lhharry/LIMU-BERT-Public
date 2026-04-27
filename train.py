@@ -109,11 +109,10 @@ class Trainer(object):
             model = nn.DataParallel(model)
 
         global_step = 0 # global iteration steps regardless of epochs
-        vali_acc_best = 0.0
         best_stat = None
         model_best = model.state_dict()
         eval_every = 10
-        vali_f1_best = 0.0      # for early stopping
+        vali_f1_best = -1.0     # for both best-model saving and early stopping
         no_improve_count = 0    # consecutive eval epochs without vali_f1 improvement
         for e in range(self.cfg.n_epochs):
             loss_sum = 0.0 # the sum of iteration losses to get average loss in every epoch
@@ -148,22 +147,19 @@ class Trainer(object):
                 vali_acc, vali_f1 = self.run(func_forward, func_evaluate, data_loader_vali)
                 print('Epoch %d/%d : Average Loss %5.4f, Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f'
                       % (e+1, self.cfg.n_epochs, loss_sum / len(data_loader_train), train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1))
-                if vali_acc > vali_acc_best:
-                    vali_acc_best = vali_acc
+                # save best model and track early stopping using vali_f1
+                if vali_f1 > vali_f1_best:
+                    vali_f1_best = vali_f1
                     best_stat = (train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1)
                     model_best = copy.deepcopy(model.state_dict())
                     self.save(0)
-                # early stopping: track vali_f1
-                if early_stop_patience is not None:
-                    if vali_f1 > vali_f1_best:
-                        vali_f1_best = vali_f1
-                        no_improve_count = 0
-                    else:
-                        no_improve_count += 1
-                    if no_improve_count >= early_stop_patience:
-                        print('Early stopping at epoch %d (no vali F1 improvement for %d evaluations).'
-                              % (e + 1, early_stop_patience))
-                        break
+                    no_improve_count = 0
+                else:
+                    no_improve_count += 1
+                if early_stop_patience is not None and no_improve_count >= early_stop_patience:
+                    print('Early stopping at epoch %d (no vali F1 improvement for %d evaluations).'
+                          % (e + 1, early_stop_patience))
+                    break
             else:
                 print('Epoch %d/%d : Average Loss %5.4f (skip evaluation)'
                       % (e + 1, self.cfg.n_epochs, loss_sum / len(data_loader_train)))

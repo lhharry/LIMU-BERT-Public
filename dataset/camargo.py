@@ -14,7 +14,7 @@ import os
 import numpy as np
 import pandas as pd
 
-SAMPLE_WINDOW = 20
+RAW_SR = 200
 DATASET_PATH = r'D:\01_Code\DATA\OpenSource\AY_Camargo'
 ACTIVITY_NAMES = ["stand", "stand-walk", "walk", "walk-stand",
                   "turn1", "turn2", "jog",
@@ -38,9 +38,11 @@ def label_user(name):
     return int(name[2:]) - 1
 
 
-def down_sample(data, window_target):
-    window_sample = window_target * 1.0 / SAMPLE_WINDOW
+def down_sample(data, raw_sr, target_sr):
+    window_sample = raw_sr * 1.0 / target_sr
     result = []
+    if window_sample < 1:
+        raise ValueError('target_sr must be less than or equal to raw_sr')
     if window_sample.is_integer():
         window = int(window_sample)
         for i in range(0, len(data), window):
@@ -64,7 +66,7 @@ def down_sample(data, window_target):
     return np.array(result)
 
 
-def load_sensor_data(path, seq_len, target_window):
+def load_sensor_data(path, seq_len, raw_sr, target_sr):
     data = []
     label = []
     for root, dirs, files in os.walk(path):
@@ -93,7 +95,7 @@ def load_sensor_data(path, seq_len, target_window):
                     if label_act < 0:
                         i = j
                         continue
-                    sensor_down = down_sample(sensor[i:j, :], target_window)
+                    sensor_down = down_sample(sensor[i:j, :], raw_sr, target_sr)
                     if sensor_down.shape[0] > seq_len:
                         sensor_down = sensor_down[:sensor_down.shape[0] // seq_len * seq_len, :]
                         sensor_down = sensor_down.reshape(sensor_down.shape[0] // seq_len, seq_len, sensor_down.shape[1])
@@ -106,8 +108,8 @@ def load_sensor_data(path, seq_len, target_window):
     return data, label
 
 
-def preprocess(path, path_save, version, target_window=20, seq_len=120):
-    data, label = load_sensor_data(path, seq_len, target_window)
+def preprocess(path, path_save, version, raw_sr=120, target_sr=10, seq_len=120):
+    data, label = load_sensor_data(path, seq_len, raw_sr, target_sr)
     data = np.concatenate(data, 0)
     label = np.concatenate(label, 0)
     print('All data processed. Size: %d' % (data.shape[0]))
@@ -118,5 +120,5 @@ def preprocess(path, path_save, version, target_window=20, seq_len=120):
 
 
 path_save = r'camargo'
-version = r'20_120'
-data, label = preprocess(DATASET_PATH, path_save, version, target_window=20, seq_len=120)
+version = r'10_20'
+data, label = preprocess(DATASET_PATH, path_save, version, raw_sr=RAW_SR, target_sr=10, seq_len=20)

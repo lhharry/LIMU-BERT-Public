@@ -12,8 +12,7 @@ __pycache__/
 *.pyc
 
 # Camargo generated arrays (too large for normal Git hosting)
-dataset/camargo/data_20_120.npy
-dataset/camargo/label_20_120.npy
+dataset/camargo/
 
 # Local training checkpoints
 saved/bert_classifier_base_gru_camargo_20_120/
