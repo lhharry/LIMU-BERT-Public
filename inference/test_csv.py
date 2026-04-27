@@ -13,16 +13,16 @@ from models import LIMUBertModel4Pretrain, fetch_classifier
 from utils import Preprocess4Normalization
 
 
-DEFAULT_CSV_PATH = Path("inference/imu_log_300s_corrected.csv")
+DEFAULT_CSV_PATH = Path("inference/data/alking_imu_log_20260427_171535.csv")
 DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_camargo_10_20/limu_bert_x.pt")
-DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_camargo_10_20/bertx_gru_v2.pt")
+DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_camargo_10_20/bertx_gru_v1.pt")
 
 # Single-mode debug config for direct VS Code Run/Debug.
 DEBUG_CONFIG = {
     "csv_path": DEFAULT_CSV_PATH,
     "dataset": "camargo",
     "dataset_version": "10_20",
-    "delimiter": ";",
+    "delimiter": ",",
     "sensor": "left",
     "feature_columns": None,
     "window_size": 20,
@@ -168,7 +168,7 @@ def build_models(
     pretrain_model_path: Path,
     classifier_model_path: Path,
 ):
-    pretrain_cfg = load_model_config("pretrain_base", "base", "v1")
+    pretrain_cfg = load_model_config("pretrain_base", "base", "v3")
     classifier_cfg = load_model_config("classifier_base_gru", "gru", classifier_version)
     if pretrain_cfg is None:
         raise ValueError("Unable to load pretrain model config for base_v1.")
@@ -271,8 +271,8 @@ def main() -> None:
         print(f"Label names: {label_names}")
     print(f"Device: {device}")
 
-    print("\nFirst 20 predictions:")
-    for i, pred in enumerate(predictions[:20]):
+    print("\nFirst 50 predictions:")
+    for i, pred in enumerate(predictions[:50]):
         name = label_names[pred] if label_names and 0 <= pred < len(label_names) else str(pred)
         print(f"{i:04d}: {pred} ({name})")
 
