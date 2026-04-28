@@ -30,6 +30,24 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
         = prepare_classifier_dataset(data, labels, label_index=label_index, training_rate=training_rate,
                                      label_rate=label_rate, merge=model_classifier_cfg.seq_len, seed=train_cfg.seed
                                      , balance=balance)
+    # 在拿到 data_train, label_train 之后
+    MIN_SAMPLES = 20
+    class_counts = np.bincount(label_train.flatten().astype(int), minlength=label_num)
+    valid_classes = np.where(class_counts >= MIN_SAMPLES)[0]
+    print("Keeping classes:", valid_classes, "Dropping:", np.where(class_counts < MIN_SAMPLES)[0])
+
+    def filter_classes(data, labels, valid_classes):
+        mask = np.isin(labels.flatten(), valid_classes)
+        # 注意要把 label remap 到连续整数 0..K-1
+        label_map = {old: new for new, old in enumerate(valid_classes)}
+        new_labels = np.array([label_map[l] for l in labels.flatten()[mask]])
+        return data[mask], new_labels
+
+    data_train, label_train = filter_classes(data_train, label_train, valid_classes)
+    data_vali,  label_vali  = filter_classes(data_vali,  label_vali,  valid_classes)
+    data_test,  label_test  = filter_classes(data_test,  label_test,  valid_classes)
+    label_num = len(valid_classes)
+
     pipeline = [Preprocess4Normalization(model_bert_cfg.feature_num)]
     data_set_train = IMUDataset(data_train, label_train, pipeline=pipeline)
     data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=train_cfg.batch_size)
@@ -47,11 +65,12 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
 
     classifier = fetch_classifier(method, model_classifier_cfg, input=model_bert_cfg.hidden, output=label_num)
     model = BERTClassifier(model_bert_cfg, classifier=classifier, frozen_bert=frozen_bert)
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr)
+    finetune_lr = train_cfg.lr * 0.1
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=finetune_lr)
     # scheduler = None  # original: fixed LR
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_cfg.n_epochs)  # single cycle, LR→0 at end
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=50, T_mult=1, eta_min=1e-5
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=train_cfg.n_epochs, eta_min=1e-6
     )
     # trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, get_device(args.gpu))  # original
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
@@ -74,14 +93,14 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
     # trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
     #                     , model_file=args.pretrain_model, load_self=True)  # original: no scheduler, no early stopping
     trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
-                        , model_file=args.pretrain_model, load_self=True, scheduler=scheduler, early_stop_patience=5)
+                        , model_file=args.pretrain_model, load_self=True, scheduler=scheduler, early_stop_patience=10)
     label_estimate_test = trainer.run(func_forward, None, data_loader_test)
     return label_test, label_estimate_test
 
 
 if __name__ == "__main__":
     train_rate = 0.8
-    label_rate = 1.0
+    label_rate = 0.9
     balance = False
     frozen_bert = False
     method = "base_gru"

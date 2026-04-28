@@ -98,6 +98,23 @@
     "model_label_index": -1,
     "model_label_size": 0,
     "size": 17598
+    },
+
+    "camargo_10_20_dense": {
+    "sr": 10,
+    "seq_len": 20,
+    "dimension": 6,
+    "activity_label_index": 0,
+    "activity_label_size": 9,
+    "activity_label": ["stand", "walk", "turn1", "turn2", "jog",
+                  "rampascent", "rampdescent",
+                  "stairascent", "stairdescent"],
+    "user_label_index": 1,
+    "user_label_size": 24,
+    "model_label_index": -1,
+    "model_label_size": 0,
+    "size": 20959
     }
 }
+
 
