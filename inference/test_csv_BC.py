@@ -13,7 +13,7 @@ from models import BERTClassifier, fetch_classifier
 from utils import Preprocess4Normalization
 
 
-DEFAULT_CSV_PATH = Path("inference/data/walking_300s_3.5kmh_imu_log_20260427_171535.csv")
+DEFAULT_CSV_PATH = Path("inference/data/levelground_ccw_normal_01_04_ds10hz.csv")
 DEFAULT_FINETUNED_MODEL = Path("saved/bert_classifier_base_gru_camargo_10_20_dense/camargo_bertx_0428dense.pt")
 
 DEBUG_CONFIG = {
@@ -21,7 +21,7 @@ DEBUG_CONFIG = {
     "dataset": "camargo",
     "dataset_version": "10_20_dense",
     "delimiter": ",",
-    "sensor": "left",
+    "sensor": "thigh",
     "feature_columns": None,
     "window_size": 20,
     "stride": 20,
@@ -46,6 +46,16 @@ def parse_feature_columns(columns_arg: str | None) -> list[str] | None:
 def resolve_default_columns(sensor: str, feature_count: int) -> list[str] | None:
     if feature_count != 6:
         return None
+    
+    if sensor == "thigh":
+        return [
+            "thigh_Accel_X",
+            "thigh_Accel_Y",
+            "thigh_Accel_Z",
+            "thigh_Gyro_X",
+            "thigh_Gyro_Y",
+            "thigh_Gyro_Z",
+        ]
 
     if sensor == "left":
         return [
