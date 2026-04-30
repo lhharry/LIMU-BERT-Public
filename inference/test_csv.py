@@ -13,9 +13,9 @@ from models import LIMUBertModel4Pretrain, fetch_classifier
 from utils import Preprocess4Normalization
 
 
-DEFAULT_CSV_PATH = Path("inference/data/levelground_ccw_normal_01_04_ds10hz.csv")
+DEFAULT_CSV_PATH = Path("inference/data/stair_1_r_01_01_ds10hz.csv")
 DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_camargo_10_20/limu_bert_x.pt")
-DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_camargo_10_20_dense/bertx_gru_dense_v1.pt")
+DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_camargo_10_20_dense/bertx_gru_dense_0430_v1.pt")
 
 # Single-mode debug config for direct VS Code Run/Debug.
 DEBUG_CONFIG = {
@@ -29,7 +29,7 @@ DEBUG_CONFIG = {
     "stride": 20,
     "feature_count": 6,
     "batch_size": 128,
-    "classifier_version": "v2",
+    "classifier_version": "v1",
     "pretrain_model": DEFAULT_PRETRAIN_MODEL,
     "classifier_model": DEFAULT_CLASSIFIER_MODEL,
     "label_path": None,
@@ -281,8 +281,8 @@ def main() -> None:
         print(f"Label names: {label_names}")
     print(f"Device: {device}")
 
-    print("\nFirst 50 predictions:")
-    for i, pred in enumerate(predictions[:50]):
+    print("\nFirst 100 predictions:")
+    for i, pred in enumerate(predictions[:100]):
         name = label_names[pred] if label_names and 0 <= pred < len(label_names) else str(pred)
         print(f"{i:04d}: {pred} ({name})")
 

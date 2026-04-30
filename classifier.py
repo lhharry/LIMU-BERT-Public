@@ -41,7 +41,12 @@ def classify_embeddings(args, data, labels, label_index, training_rate, label_ra
     data_loader_vali = DataLoader(data_set_vali, shuffle=False, batch_size=train_cfg.batch_size)
     data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size)
 
-    criterion = nn.CrossEntropyLoss()
+    #criterion = nn.CrossEntropyLoss()
+    device = get_device(args.gpu)
+    class_counts = np.bincount(label_train.flatten().astype(int), minlength=label_num)
+    weights = 1.0 / np.sqrt(class_counts.astype(float) + 1.0)
+    weights = weights / weights.sum() * label_num
+    criterion = nn.CrossEntropyLoss(weight=torch.tensor(weights, dtype=torch.float).to(device))
     model = fetch_classifier(method, model_cfg, input=data_train.shape[-1], output=label_num)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr)  # , weight_decay=0.95
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, get_device(args.gpu))
@@ -68,7 +73,7 @@ def classify_embeddings(args, data, labels, label_index, training_rate, label_ra
 
 if __name__ == "__main__":
 
-    training_rate = 0.8 # unlabeled sample / total sample
+    training_rate = 0.7 # unlabeled sample / total sample
     label_rate = 0.9 # labeled sample / unlabeled sample
     balance = False
 
@@ -76,14 +81,10 @@ if __name__ == "__main__":
     method = "gru"
     args = handle_argv('classifier_' + mode + "_" + method, 'train.json', method)
     embedding, labels = load_embedding_label(args.model_file, args.dataset, args.dataset_version)
-    if embedding.shape[0] != labels.shape[0]:
-        merge = embedding.shape[0] // labels.shape[0]
-        labels = labels.reshape(labels.shape[0] * merge, labels.shape[1] // merge, labels.shape[2])
     label_test, label_estimate_test = classify_embeddings(args, embedding, labels, args.label_index,
                                                           training_rate, label_rate, balance=balance, method=method)
 
     label_names, label_num = load_dataset_label_names(args.dataset_cfg, args.label_index)
     acc, matrix, f1 = stat_results(label_test, label_estimate_test)
     matrix_norm = plot_matrix(matrix, label_names)
-
 

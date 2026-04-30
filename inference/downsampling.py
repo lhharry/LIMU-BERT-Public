@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-DEFAULT_CSV_PATH = Path("inference/data/levelground_ccw_normal_01_04.csv")
+DEFAULT_CSV_PATH = Path("inference/data/stair_1_r_01_01.csv")
 DEFAULT_CSV_SAVE_PATH = Path("inference/data/")
 
 
