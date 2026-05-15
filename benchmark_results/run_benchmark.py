@@ -62,11 +62,14 @@ RUNS = [
     {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense"},
     {"tag": "R-GRU",       "mode": "supervised", "method": "gru"},
     # --- LIMU-BERT-X foundation model + GRU head ---
+    # model_version = "<bert_version>_<classifier_version>". Pin to v3_v1 so the
+    # joint runs use the same BERT-base config (v3) as the separated mode and
+    # inference/test_csv.py.
     {"tag": "LIMU-BERT-X+GRU (frozen)",
-     "mode": "bert", "method": "base_gru",
+     "mode": "bert", "method": "base_gru", "model_version": "v3_v1",
      "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 1},
     {"tag": "LIMU-BERT-X+GRU (finetune)",
-     "mode": "bert", "method": "base_gru",
+     "mode": "bert", "method": "base_gru", "model_version": "v3_v1",
      "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0},
     # Separated mode: BERT runs in eval/no_grad as a frozen feature extractor
     # (same as inference/test_csv.py), embeddings are cached in memory, then a

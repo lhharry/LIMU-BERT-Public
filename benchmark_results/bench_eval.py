@@ -62,11 +62,14 @@ def main():
     tmp_basename = os.path.basename(tmp.name)
 
     # BERT mode expects model_version as <bert_version>_<classifier_version>
-    # (see config.py:load_model_config, which splits on '_'). If only one token
-    # was supplied (e.g. "v1"), reuse it for both halves: "v1" -> "v1_v1".
+    # (see config.py:load_model_config, which splits on '_'). Callers in
+    # run_benchmark.py pass this explicitly (e.g. "v3_v1"); fail loudly if a
+    # single token slips through so we don't silently fall back to base_v1.
     model_version = args_local.model_version
     if args_local.mode == "bert" and "_" not in model_version:
-        model_version = model_version + "_" + model_version
+        raise SystemExit(
+            f"--mode bert requires model_version='<bert_v>_<classifier_v>', got '{model_version}'"
+        )
 
     sys.argv = [
         "bench_eval",
