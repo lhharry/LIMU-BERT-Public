@@ -1,0 +1,212 @@
+#!/usr/bin/env python
+"""
+Benchmark orchestrator.
+
+Spawns one subprocess per (method, label_rate, seed) combo via bench_eval.py.
+- stdout/stderr of each run is tee'd to benchmark_results/logs/<run_id>.log
+- per-run metrics dumped to benchmark_results/results/<run_id>.json
+- aggregated table written to benchmark_results/results/summary.csv
+
+Edit RUNS below to control which configurations are evaluated. The defaults
+benchmark the five-line story from the paper discussion:
+  supervised baselines (DCNN, DeepSense, R-GRU) vs LIMU-BERT-X-pretrained GRU.
+"""
+import argparse
+import csv
+import datetime as dt
+import json
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(HERE)
+LOG_DIR = os.path.join(HERE, "logs")
+RESULT_DIR = os.path.join(HERE, "results")
+os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(RESULT_DIR, exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# CONFIG MATRIX
+# ---------------------------------------------------------------------------
+# Each run is a dict of kwargs forwarded to bench_eval.py. Add or remove freely.
+# "tag" is a human-readable identifier used in the CSV / plots.
+#
+# Available "method" values (see models.py:fetch_classifier):
+#   supervised:  gru, dcnn, deepsense, attn, cnn2, cnn1, lstm
+#   bert:        base_gru, base_cnn, base_attn, base_lstm
+# ---------------------------------------------------------------------------
+
+DATASET = "camargo"
+DATASET_VERSION = "10_20_dense"
+MODEL_VERSION = "v1"
+TRAINING_RATE = 0.8
+SEEDS = [3431, 42, 2024]
+LABEL_RATES = [0.01, 0.05, 0.10, 0.50, 1.00]
+
+# Which label column to predict. 0 = activity for camargo (see
+# dataset/data_config.json:86). Do NOT use -1 here: in some configs that index
+# matches a "_label_index: -1" sentinel and yields label_num=0 → CUDA assert.
+LABEL_INDEX = 0
+
+# Training recipe applied identically to BOTH supervised and bert paths so the
+# two are comparable. "filtered" matches what bert_classify used to hardcode
+# (rare-class drop + class-weighted CE + cosine LR + early stop + lr*0.1);
+# "vanilla" disables all of that. Per-RUN override via run_cfg["recipe"].
+DEFAULT_RECIPE = "filtered"
+
+# Path to the LIMU-BERT-X foundation-model checkpoint to use.
+# Adjust if you want a different pretrained file.
+LIMU_BERTX_CKPT = os.path.join(
+    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x.pt"
+)
+
+RUNS = [
+    # --- Supervised baselines (no pretraining) ---
+    {"tag": "DCNN",        "mode": "supervised", "method": "dcnn"},
+    {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense"},
+    {"tag": "R-GRU",       "mode": "supervised", "method": "gru"},
+    # --- LIMU-BERT-X foundation model + GRU head ---
+    {"tag": "LIMU-BERT-X+GRU (frozen)",
+     "mode": "bert", "method": "base_gru",
+     "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 1},
+    {"tag": "LIMU-BERT-X+GRU (finetune)",
+     "mode": "bert", "method": "base_gru",
+     "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0},
+]
+
+
+def run_id(tag, label_rate, seed):
+    safe = tag.replace(" ", "_").replace("/", "-").replace("(", "").replace(")", "")
+    return f"{safe}__lr{label_rate}__seed{seed}"
+
+
+def run_one(run_cfg, label_rate, seed, gpu=None, dry=False):
+    rid = run_id(run_cfg["tag"], label_rate, seed)
+    log_path = os.path.join(LOG_DIR, rid + ".log")
+    json_path = os.path.join(RESULT_DIR, rid + ".json")
+
+    cmd = [
+        sys.executable, os.path.join(HERE, "bench_eval.py"),
+        "--mode", run_cfg["mode"],
+        "--method", run_cfg["method"],
+        "--model_version", run_cfg.get("model_version", MODEL_VERSION),
+        "--dataset", run_cfg.get("dataset", DATASET),
+        "--dataset_version", run_cfg.get("dataset_version", DATASET_VERSION),
+        "--label_rate", str(label_rate),
+        "--training_rate", str(run_cfg.get("training_rate", TRAINING_RATE)),
+        "--seed", str(seed),
+        "--save_model", "bench_" + rid,
+        "--out_json", json_path,
+        "--balance", str(run_cfg.get("balance", 1)),
+        "--recipe", run_cfg.get("recipe", DEFAULT_RECIPE),
+        "--label_index", str(run_cfg.get("label_index", LABEL_INDEX)),
+    ]
+    if run_cfg.get("pretrain_model"):
+        cmd += ["--pretrain_model", run_cfg["pretrain_model"]]
+    if run_cfg["mode"] == "bert":
+        cmd += ["--frozen_bert", str(run_cfg.get("frozen_bert", 1))]
+    if gpu is not None:
+        cmd += ["--gpu", gpu]
+
+    header = (
+        f"=== {rid} ===\n"
+        f"start: {dt.datetime.now().isoformat()}\n"
+        f"cmd:   {' '.join(cmd)}\n"
+        "----------------------------------------------------------------\n"
+    )
+    print(header, end="", flush=True)
+    if dry:
+        return None
+
+    with open(log_path, "w", encoding="utf-8") as logf:
+        logf.write(header)
+        logf.flush()
+        proc = subprocess.Popen(cmd, cwd=REPO_ROOT, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, bufsize=1,
+                                encoding="utf-8", errors="replace")
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            logf.write(line)
+        ret = proc.wait()
+        footer = f"----------------------------------------------------------------\nreturncode: {ret}\nend: {dt.datetime.now().isoformat()}\n"
+        logf.write(footer)
+    print(footer, end="")
+
+    if ret != 0 or not os.path.exists(json_path):
+        return {"tag": run_cfg["tag"], "label_rate": label_rate, "seed": seed,
+                "acc": None, "f1": None, "status": f"failed(rc={ret})",
+                "log": log_path}
+
+    with open(json_path, "r") as f:
+        result = json.load(f)
+    return {
+        "tag": run_cfg["tag"],
+        "method": result.get("method"),
+        "mode": result.get("mode"),
+        "pretrain_model": result.get("pretrain_model"),
+        "frozen_bert": result.get("frozen_bert"),
+        "recipe": result.get("recipe"),
+        "dataset": result.get("dataset"),
+        "dataset_version": result.get("dataset_version"),
+        "label_rate": label_rate,
+        "seed": seed,
+        "acc": result.get("acc"),
+        "f1": result.get("f1"),
+        "status": "ok",
+        "log": log_path,
+        "json": json_path,
+    }
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--gpu", default=None)
+    ap.add_argument("--dry", action="store_true", help="Print the commands without running.")
+    ap.add_argument("--only", default=None,
+                    help="Comma-separated substrings; only runs whose tag matches at least one will execute.")
+    ap.add_argument("--label_rates", default=None,
+                    help="Comma-separated override (e.g. '0.01,0.1,1.0').")
+    ap.add_argument("--seeds", default=None,
+                    help="Comma-separated override (e.g. '3431,42').")
+    ap.add_argument("--recipe", choices=["vanilla", "filtered"], default=None,
+                    help="Override DEFAULT_RECIPE for every run in this invocation.")
+    ap.add_argument("--model_version", default=None,
+                    help="Override MODEL_VERSION for every run in this invocation. "
+                         "BERT mode wants <bert_v>_<classifier_v>, e.g. 'v3_v1'.")
+    args = ap.parse_args()
+
+    label_rates = LABEL_RATES if args.label_rates is None else [float(x) for x in args.label_rates.split(",")]
+    seeds = SEEDS if args.seeds is None else [int(x) for x in args.seeds.split(",")]
+    runs = RUNS
+    if args.only:
+        keys = [k.strip() for k in args.only.split(",") if k.strip()]
+        runs = [r for r in RUNS if any(k in r["tag"] for k in keys)]
+    if args.recipe is not None:
+        runs = [{**r, "recipe": args.recipe} for r in runs]
+    if args.model_version is not None:
+        runs = [{**r, "model_version": args.model_version} for r in runs]
+
+    summary_path = os.path.join(RESULT_DIR, "summary.csv")
+    write_header = not os.path.exists(summary_path)
+    fieldnames = ["tag", "method", "mode", "pretrain_model", "frozen_bert", "recipe",
+                  "dataset", "dataset_version", "label_rate", "seed", "acc", "f1", "status",
+                  "log", "json"]
+    with open(summary_path, "a", newline="", encoding="utf-8") as csvf:
+        writer = csv.DictWriter(csvf, fieldnames=fieldnames, extrasaction="ignore")
+        if write_header:
+            writer.writeheader()
+        for run_cfg in runs:
+            for lr in label_rates:
+                for seed in seeds:
+                    row = run_one(run_cfg, lr, seed, gpu=args.gpu, dry=args.dry)
+                    if row is None:
+                        continue
+                    writer.writerow(row)
+                    csvf.flush()
+    print(f"\nSummary CSV: {summary_path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -15,6 +15,7 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 import train
 from config import load_dataset_label_names
 from models import BERTClassifier, fetch_classifier
+from recipe import Recipe, filter_rare_classes, make_criterion, make_scheduler
 
 from statistic import stat_acc_f1
 from utils import get_device,  handle_argv \
@@ -22,31 +23,20 @@ from utils import get_device,  handle_argv \
     prepare_classifier_dataset
 
 
-def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=False, balance=True):
+def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=False, balance=True, recipe=None):
+    if recipe is None:
+        recipe = Recipe.vanilla()
+
     data, labels, train_cfg, model_bert_cfg, model_classifier_cfg, dataset_cfg = load_bert_classifier_data_config(args)
     label_names, label_num = load_dataset_label_names(dataset_cfg, label_index)
 
-    data_train, label_train, data_vali, label_vali, data_test, label_test \
-        = prepare_classifier_dataset(data, labels, label_index=label_index, training_rate=training_rate,
-                                     label_rate=label_rate, merge=model_classifier_cfg.seq_len, seed=train_cfg.seed
-                                     , balance=balance)
-    # 在拿到 data_train, label_train 之后
-    MIN_SAMPLES = 20
-    class_counts = np.bincount(label_train.flatten().astype(int), minlength=label_num)
-    valid_classes = np.where(class_counts >= MIN_SAMPLES)[0]
-    print("Keeping classes:", valid_classes, "Dropping:", np.where(class_counts < MIN_SAMPLES)[0])
-
-    def filter_classes(data, labels, valid_classes):
-        mask = np.isin(labels.flatten(), valid_classes)
-        # 注意要把 label remap 到连续整数 0..K-1
-        label_map = {old: new for new, old in enumerate(valid_classes)}
-        new_labels = np.array([label_map[l] for l in labels.flatten()[mask]])
-        return data[mask], new_labels
-
-    data_train, label_train = filter_classes(data_train, label_train, valid_classes)
-    data_vali,  label_vali  = filter_classes(data_vali,  label_vali,  valid_classes)
-    data_test,  label_test  = filter_classes(data_test,  label_test,  valid_classes)
-    label_num = len(valid_classes)
+    splits = prepare_classifier_dataset(
+        data, labels, label_index=label_index, training_rate=training_rate,
+        label_rate=label_rate, merge=model_classifier_cfg.seq_len,
+        seed=train_cfg.seed, balance=balance,
+    )
+    splits, label_num, _ = filter_rare_classes(splits, label_num, recipe.min_class_samples)
+    data_train, label_train, data_vali, label_vali, data_test, label_test = splits
 
     pipeline = [Preprocess4Normalization(model_bert_cfg.feature_num)]
     data_set_train = IMUDataset(data_train, label_train, pipeline=pipeline)
@@ -56,23 +46,13 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
     data_set_vali = IMUDataset(data_vali, label_vali, pipeline=pipeline)
     data_loader_vali = DataLoader(data_set_vali, shuffle=False, batch_size=train_cfg.batch_size)
 
-    # criterion = nn.CrossEntropyLoss()  # original: no class weighting
     device = get_device(args.gpu)
-    class_counts = np.bincount(label_train.flatten().astype(int), minlength=label_num)
-    weights = 1.0 / (class_counts.astype(float) + 1.0)  # Laplace smoothing for empty classes
-    weights = weights / weights.sum() * label_num
-    criterion = nn.CrossEntropyLoss(weight=torch.tensor(weights, dtype=torch.float).to(device))
+    criterion = make_criterion(label_train, label_num, device, recipe.class_weighted_loss)
 
     classifier = fetch_classifier(method, model_classifier_cfg, input=model_bert_cfg.hidden, output=label_num)
     model = BERTClassifier(model_bert_cfg, classifier=classifier, frozen_bert=frozen_bert)
-    finetune_lr = train_cfg.lr * 0.1
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=finetune_lr)
-    # scheduler = None  # original: fixed LR
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_cfg.n_epochs)  # single cycle, LR→0 at end
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=train_cfg.n_epochs, eta_min=1e-6
-    )
-    # trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, get_device(args.gpu))  # original
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr * recipe.lr_scale)
+    scheduler = make_scheduler(optimizer, train_cfg.n_epochs, recipe)
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
 
     def func_loss(model, batch):
@@ -90,10 +70,9 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
         stat = stat_acc_f1(label.cpu().numpy(), predicts.cpu().numpy())
         return stat
 
-    # trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
-    #                     , model_file=args.pretrain_model, load_self=True)  # original: no scheduler, no early stopping
-    trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
-                        , model_file=args.pretrain_model, load_self=True, scheduler=scheduler, early_stop_patience=10)
+    trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali,
+                  model_file=args.pretrain_model, load_self=True,
+                  scheduler=scheduler, early_stop_patience=recipe.early_stop_patience)
     label_estimate_test = trainer.run(func_forward, None, data_loader_test)
     return label_test, label_estimate_test
 
@@ -107,7 +86,6 @@ if __name__ == "__main__":
     args = handle_argv('bert_classifier_' + method, 'bert_classifier_train.json', method)
     if args.label_index != -1:
         label_index = args.label_index
-    label_test, label_estimate_test = bert_classify(args, args.label_index, train_rate, label_rate
-                                                    , frozen_bert=frozen_bert, balance=balance)
-
-
+    label_test, label_estimate_test = bert_classify(args, args.label_index, train_rate, label_rate,
+                                                    frozen_bert=frozen_bert, balance=balance,
+                                                    recipe=Recipe.filtered())

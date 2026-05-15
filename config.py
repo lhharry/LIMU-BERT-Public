@@ -191,8 +191,12 @@ def load_dataset_stats(dataset, version):
 
 
 def load_dataset_label_names(dataset_config, label_index):
+    # -1 is used as a "not present" sentinel in dataset configs (e.g. model_label_index=-1
+    # for datasets that don't have a model label). Matching on it would cause callers
+    # passing label_index=-1 to silently bind to a zero-sized label set; skip those.
     for p in dir(dataset_config):
-        if getattr(dataset_config, p) == label_index and "label_index" in p:
+        v = getattr(dataset_config, p)
+        if v == label_index and "label_index" in p and v != -1:
             temp = p.split("_")
             label_num = getattr(dataset_config, temp[0] + "_" + temp[1] + "_size")
             if hasattr(dataset_config, temp[0] + "_" + temp[1]):
