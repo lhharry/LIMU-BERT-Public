@@ -30,9 +30,6 @@ Optional flags for the runner:
 - `--only DCNN,LIMU` only run rows whose tag matches any substring.
 - `--label_rates 0.01,0.1,1.0` override the default label-rate sweep.
 - `--seeds 3431,42` override the seeds.
-- `--recipe {vanilla,filtered}` override `DEFAULT_RECIPE` for every run in the
-  invocation. The chosen recipe is applied identically to **both** the
-  supervised and the BERT path so the comparison is apples-to-apples.
 
 ## Editing the config matrix
 
@@ -48,18 +45,17 @@ Open `run_benchmark.py` and edit the constants at the top:
   `_label_index: -1` sentinel and yields `label_num=0`, which crashes CE with
   a CUDA `t < n_classes` assert.
 - `LABEL_RATES`, `SEEDS` — sweep parameters.
-- `DEFAULT_RECIPE` — `"filtered"` (drop classes with <5 train samples,
-  class-weighted CE, cosine LR, early stop, lr×0.1) or `"vanilla"` (none of
-  the above). Applied identically to both paths. Per-run override via
-  `run_cfg["recipe"]`. The 5-sample threshold auto-falls-back to "keep every
-  class with >=1 sample" when no class would survive — necessary so the same
-  recipe works at very low `label_rate` (e.g. 0.01). Vali/test rows for
-  classes absent from the filtered training set are dropped, so metrics
-  reflect only the surviving label space.
+- All runs use the single `Recipe.default()` defined in `recipe.py`: sqrt
+  class-weighted CE (matches classifier.py), no rare-class filter, no LR
+  scheduler, early stopping (patience=10), and `lr_scale=0.1`. Applied
+  identically to supervised, bert-joint, and bert-separated paths so the
+  comparison is apples-to-apples.
 - `RUNS` — list of model configurations to evaluate. Each entry is a dict;
   `mode="supervised"` calls `benchmark.py:classify_benchmark`, `mode="bert"`
   calls `classifier_bert.py:bert_classify` (which loads the pretrained
-  LIMU-BERT-X weights). Optional per-run keys: `recipe`, `label_index`.
+  LIMU-BERT-X weights), `mode="bert_separated"` runs the
+  `embedding.py + classifier.py` two-stage path. Optional per-run key:
+  `label_index`.
 
 ## Outputs
 
@@ -72,14 +68,11 @@ Open `run_benchmark.py` and edit the constants at the top:
 
 ## Notes
 
-- The runner calls the repo's `benchmark.py:classify_benchmark` and
-  `classifier_bert.py:bert_classify` via subprocess. Both functions accept a
-  shared `recipe` argument (see `recipe.py`); `bench_eval.py` builds one
-  `Recipe` per run and passes it to both paths so the comparison is fair.
-- The recipe used to be hardcoded inside `bert_classify` (rare-class drop,
-  class-weighted CE, cosine LR, early stop, lr×0.1) and absent from
-  `classify_benchmark`, which made the BERT vs supervised numbers
-  incomparable. That is now `Recipe.filtered()` and applies to both paths.
+- The runner calls `benchmark.py:classify_benchmark`,
+  `classifier_bert.py:bert_classify`, and `classifier.py:classify_embeddings`
+  via subprocess. All three accept a `recipe` argument (see `recipe.py`);
+  `bench_eval.py` builds one `Recipe.default()` per run and passes it to
+  every path so the comparison is fair.
 - Each run writes a temporary `config/bench_tmp_*.json` so the seed can be
   overridden cleanly; the file is removed when the run finishes.
 - `bench_eval.py` sets `classifier_bert.method` before calling `bert_classify`
@@ -87,5 +80,6 @@ Open `run_benchmark.py` and edit the constants at the top:
   variable rather than a parameter.
 - Failed runs are recorded in `summary.csv` with `status=failed(...)` so they
   do not pollute plots, which only use rows with `status=ok`.
-- The CSV schema gained a `recipe` column; delete or rotate any pre-existing
-  `results/summary.csv` before the next sweep so the header matches.
+- The CSV schema has a `recipe` column that always reads `"default"` after
+  the unification; pre-unification rows ("filtered" / "vanilla" /
+  "classifier_py_default") are kept so old sweeps can be filtered out.

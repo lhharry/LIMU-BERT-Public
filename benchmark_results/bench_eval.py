@@ -15,11 +15,22 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+from utils import handle_argv
+from statistic import stat_results
+from recipe import Recipe
+from benchmark import classify_benchmark
+import classifier_bert
+import embedding
+import classifier as cls_module
+
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--mode", choices=["supervised", "bert"], required=True,
-                   help="supervised = benchmark.py path (no pretrain), bert = classifier_bert.py path (with LIMU-BERT-X)")
+    p.add_argument("--mode", choices=["supervised", "bert", "bert_separated"], required=True,
+                   help="supervised = benchmark.py path (no pretrain); "
+                        "bert = classifier_bert.py path (BERTClassifier joint, with frozen_bert flag); "
+                        "bert_separated = embedding.py + classifier.py path (BERT eval/no_grad -> cached "
+                        "embeddings -> standalone GRU head). All three modes use Recipe.default().")
     p.add_argument("--method", required=True,
                    help="gru / dcnn / deepsense / attn for supervised; base_gru / base_cnn / ... for bert")
     p.add_argument("--model_version", default="v1")
@@ -35,10 +46,6 @@ def main():
     p.add_argument("--gpu", default=None)
     p.add_argument("--balance", type=int, default=1)
     p.add_argument("--frozen_bert", type=int, default=1)
-    p.add_argument("--recipe", choices=["vanilla", "filtered"], default="filtered",
-                   help="Training recipe applied identically to both supervised and bert paths. "
-                        "'filtered' = drop classes with <20 train samples + class-weighted CE + cosine LR + early stop + lr*0.1. "
-                        "'vanilla' = none of the above.")
     p.add_argument("--out_json", required=True)
     args_local = p.parse_args()
 
@@ -76,29 +83,66 @@ def main():
         sys.argv += ["-f", args_local.pretrain_model]
 
     try:
-        from utils import handle_argv
-        from statistic import stat_results
-        from recipe import Recipe
-
-        recipe = Recipe.filtered() if args_local.recipe == "filtered" else Recipe.vanilla()
+        recipe = Recipe.default()
 
         if args_local.mode == "supervised":
             target = "bench_" + args_local.method
             args = handle_argv(target, tmp_basename, args_local.method)
-            from benchmark import classify_benchmark
             label_test, preds = classify_benchmark(
                 args, args.label_index, args_local.training_rate, args_local.label_rate,
                 balance=bool(args_local.balance), method=args_local.method, recipe=recipe,
             )
-        else:
+        elif args_local.mode == "bert":
             target = "bert_classifier_" + args_local.method
             args = handle_argv(target, tmp_basename, args_local.method)
-            import classifier_bert
             classifier_bert.method = args_local.method  # see note: bert_classify uses free var
             label_test, preds = classifier_bert.bert_classify(
                 args, args.label_index, args_local.training_rate, args_local.label_rate,
                 frozen_bert=bool(args_local.frozen_bert), balance=bool(args_local.balance),
                 recipe=recipe,
+            )
+        else:  # bert_separated
+            if not args_local.pretrain_model:
+                raise SystemExit("--pretrain_model is required for --mode bert_separated")
+
+            # Stage 1: LIMU-BERT-X feature extractor (eval/no_grad inside Trainer.run).
+            # Pretrain side uses base_v3 to match inference/test_csv.py.
+            saved_argv = sys.argv[:]
+            sys.argv = [
+                "bench_eval", "v3",
+                args_local.dataset, args_local.dataset_version,
+                "-t", "config/pretrain.json",
+                "-s", args_local.save_model,
+                "-l", str(args_local.label_index),
+                "-f", args_local.pretrain_model,
+            ]
+            if args_local.gpu is not None:
+                sys.argv += ["-g", args_local.gpu]
+            pre_args = handle_argv("pretrain_base", "pretrain.json", "base")
+
+            _, embeddings, all_labels = embedding.generate_embedding_or_output(
+                pre_args, save=False, output_embed=True
+            )
+
+            # Stage 2: standalone GRU head trained on cached embeddings via
+            # classifier.classify_embeddings using the shared Recipe.default().
+            # Method is hardcoded to "gru" because separated mode = gru_v1 head.
+            sys.argv = [
+                "bench_eval", "v1",
+                args_local.dataset, args_local.dataset_version,
+                "-t", "config/" + tmp_basename,
+                "-s", args_local.save_model,
+                "-l", str(args_local.label_index),
+            ]
+            if args_local.gpu is not None:
+                sys.argv += ["-g", args_local.gpu]
+            cls_args = handle_argv("classifier_base_gru", tmp_basename, "gru")
+            sys.argv = saved_argv
+
+            label_test, preds = cls_module.classify_embeddings(
+                cls_args, embeddings, all_labels, cls_args.label_index,
+                args_local.training_rate, args_local.label_rate,
+                balance=bool(args_local.balance), method="gru", recipe=recipe,
             )
 
         acc, matrix, f1 = stat_results(label_test, preds)
@@ -114,8 +158,9 @@ def main():
             "training_rate": args_local.training_rate,
             "seed": args_local.seed,
             "pretrain_model": args_local.pretrain_model,
-            "frozen_bert": bool(args_local.frozen_bert),
-            "recipe": args_local.recipe,
+            "frozen_bert": (None if args_local.mode == "bert_separated"
+                            else bool(args_local.frozen_bert)),
+            "recipe": "default",
             "confusion_matrix": matrix.tolist(),
         }
         os.makedirs(os.path.dirname(os.path.abspath(args_local.out_json)), exist_ok=True)

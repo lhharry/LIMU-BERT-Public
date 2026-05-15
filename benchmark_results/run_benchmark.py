@@ -50,12 +50,6 @@ LABEL_RATES = [0.01, 0.05, 0.10, 0.50, 1.00]
 # matches a "_label_index: -1" sentinel and yields label_num=0 → CUDA assert.
 LABEL_INDEX = 0
 
-# Training recipe applied identically to BOTH supervised and bert paths so the
-# two are comparable. "filtered" matches what bert_classify used to hardcode
-# (rare-class drop + class-weighted CE + cosine LR + early stop + lr*0.1);
-# "vanilla" disables all of that. Per-RUN override via run_cfg["recipe"].
-DEFAULT_RECIPE = "filtered"
-
 # Path to the LIMU-BERT-X foundation-model checkpoint to use.
 # Adjust if you want a different pretrained file.
 LIMU_BERTX_CKPT = os.path.join(
@@ -74,6 +68,14 @@ RUNS = [
     {"tag": "LIMU-BERT-X+GRU (finetune)",
      "mode": "bert", "method": "base_gru",
      "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0},
+    # Separated mode: BERT runs in eval/no_grad as a frozen feature extractor
+    # (same as inference/test_csv.py), embeddings are cached in memory, then a
+    # standalone GRU v1 head is trained via classifier.classify_embeddings.
+    # Uses the same Recipe.default() as the other rows so the numbers are
+    # directly comparable.
+    {"tag": "LIMU-BERT-X+GRU (separated)",
+     "mode": "bert_separated", "method": "gru",
+     "pretrain_model": LIMU_BERTX_CKPT},
 ]
 
 
@@ -100,7 +102,6 @@ def run_one(run_cfg, label_rate, seed, gpu=None, dry=False):
         "--save_model", "bench_" + rid,
         "--out_json", json_path,
         "--balance", str(run_cfg.get("balance", 1)),
-        "--recipe", run_cfg.get("recipe", DEFAULT_RECIPE),
         "--label_index", str(run_cfg.get("label_index", LABEL_INDEX)),
     ]
     if run_cfg.get("pretrain_model"):
@@ -170,8 +171,6 @@ def main():
                     help="Comma-separated override (e.g. '0.01,0.1,1.0').")
     ap.add_argument("--seeds", default=None,
                     help="Comma-separated override (e.g. '3431,42').")
-    ap.add_argument("--recipe", choices=["vanilla", "filtered"], default=None,
-                    help="Override DEFAULT_RECIPE for every run in this invocation.")
     ap.add_argument("--model_version", default=None,
                     help="Override MODEL_VERSION for every run in this invocation. "
                          "BERT mode wants <bert_v>_<classifier_v>, e.g. 'v3_v1'.")
@@ -183,8 +182,6 @@ def main():
     if args.only:
         keys = [k.strip() for k in args.only.split(",") if k.strip()]
         runs = [r for r in RUNS if any(k in r["tag"] for k in keys)]
-    if args.recipe is not None:
-        runs = [{**r, "recipe": args.recipe} for r in runs]
     if args.model_version is not None:
         runs = [{**r, "model_version": args.model_version} for r in runs]
 

@@ -13,7 +13,7 @@ from models import LIMUBertModel4Pretrain, fetch_classifier
 from utils import Preprocess4Normalization
 
 
-DEFAULT_CSV_PATH = Path("inference/data/stair_1_r_01_01_ds10hz.csv")
+DEFAULT_CSV_PATH = Path("inference/data/levelground_cw_slow_01_01_ds10hz.csv")
 DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_camargo_10_20/limu_bert_x.pt")
 DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_camargo_10_20_dense/bertx_gru_dense_0430_v1.pt")
 
@@ -22,7 +22,7 @@ DEBUG_CONFIG = {
     "csv_path": DEFAULT_CSV_PATH,
     "dataset": "camargo",
     "dataset_version": "10_20_dense",
-    "delimiter": ",",
+    "delimiter": "auto",  # "auto" detects , or ; ; or pass a literal like "," / ";"
     "sensor": "thigh",
     "feature_columns": None,
     "window_size": 20,
@@ -91,7 +91,10 @@ def load_csv_features(
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
-    df = pd.read_csv(csv_path, sep=delimiter)
+    if delimiter == "auto":
+        df = pd.read_csv(csv_path, sep=r"[,;]", engine="python")
+    else:
+        df = pd.read_csv(csv_path, sep=delimiter)
     if df.empty:
         raise ValueError(f"CSV file is empty: {csv_path}")
 

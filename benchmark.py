@@ -15,7 +15,7 @@ import train
 from config import load_dataset_label_names
 from models import fetch_classifier
 from plot import plot_matrix
-from recipe import Recipe, filter_rare_classes, make_criterion, make_scheduler
+from recipe import Recipe, make_criterion
 from statistic import stat_acc_f1, stat_results
 from utils import get_device, handle_argv, IMUDataset, load_classifier_data_config, \
     FFTDataset, prepare_classifier_dataset, Preprocess4Normalization
@@ -23,7 +23,7 @@ from utils import get_device, handle_argv, IMUDataset, load_classifier_data_conf
 
 def classify_benchmark(args, label_index, training_rate, label_rate, balance=True, method=None, recipe=None):
     if recipe is None:
-        recipe = Recipe.vanilla()
+        recipe = Recipe.default()
 
     data, labels, train_cfg, model_cfg, dataset_cfg = load_classifier_data_config(args)
     label_names, label_num = load_dataset_label_names(dataset_cfg, label_index)
@@ -32,7 +32,6 @@ def classify_benchmark(args, label_index, training_rate, label_rate, balance=Tru
         label_rate=label_rate, merge=model_cfg.seq_len,
         seed=train_cfg.seed, balance=balance,
     )
-    splits, label_num, _ = filter_rare_classes(splits, label_num, recipe.min_class_samples)
     data_train, label_train, data_vali, label_vali, data_test, label_test = splits
     pipeline = [Preprocess4Normalization(model_cfg.input)]
     if method != 'deepsense':
@@ -48,10 +47,9 @@ def classify_benchmark(args, label_index, training_rate, label_rate, balance=Tru
     data_loader_vali = DataLoader(data_set_vali, shuffle=False, batch_size=train_cfg.batch_size)
 
     device = get_device(args.gpu)
-    criterion = make_criterion(label_train, label_num, device, recipe.class_weighted_loss)
+    criterion = make_criterion(label_train, label_num, device)
     model = fetch_classifier(method, model_cfg, input=model_cfg.input, output=label_num)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr * recipe.lr_scale)
-    scheduler = make_scheduler(optimizer, train_cfg.n_epochs, recipe)
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
 
     def func_loss(model, batch):
@@ -70,7 +68,7 @@ def classify_benchmark(args, label_index, training_rate, label_rate, balance=Tru
         return stat
 
     trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali,
-                  scheduler=scheduler, early_stop_patience=recipe.early_stop_patience)
+                  early_stop_patience=recipe.early_stop_patience)
     label_estimate_test = trainer.run(func_forward, None, data_loader_test)
     return label_test, label_estimate_test
 
