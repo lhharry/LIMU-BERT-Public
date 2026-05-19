@@ -42,8 +42,8 @@ DATASET = "camargo"
 DATASET_VERSION = "10_20_dense"
 MODEL_VERSION = "v1"
 TRAINING_RATE = 0.8
-SEEDS = [3431, 42, 2024]
-LABEL_RATES = [0.01, 0.05, 0.10, 0.50, 1.00]
+SEEDS = [3431, 42, 2026]
+LABEL_RATES = [0.002 , 0.005, 0.01, 0.02, 0.05, 0.1]
 
 # Which label column to predict. 0 = activity for camargo (see
 # dataset/data_config.json:86). Do NOT use -1 here: in some configs that index

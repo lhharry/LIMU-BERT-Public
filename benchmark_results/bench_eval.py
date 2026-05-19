@@ -44,7 +44,7 @@ def main():
     p.add_argument("--save_model", default="bench_tmp")
     p.add_argument("--label_index", type=int, default=-1)
     p.add_argument("--gpu", default=None)
-    p.add_argument("--balance", type=int, default=1)
+    p.add_argument("--balance", type=int, default=0)
     p.add_argument("--frozen_bert", type=int, default=1)
     p.add_argument("--out_json", required=True)
     args_local = p.parse_args()

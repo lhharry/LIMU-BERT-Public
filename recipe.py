@@ -16,7 +16,7 @@ import torch.nn as nn
 @dataclass
 class Recipe:
     early_stop_patience: int = 10
-    lr_scale: float = 0.1
+    lr_scale: float = 1
 
     @staticmethod
     def default() -> "Recipe":
