@@ -64,24 +64,24 @@ LIMU_BERTX_CKPT = os.path.join(
 # just edit the string below — every entry has its own model_version field.
 RUNS = [
     # --- Supervised baselines (no pretraining) ---
-    {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
-    {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
-    {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v2"},
+    # {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
+    # {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
+    {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
     # --- LIMU-BERT-X foundation model + GRU head ---
     # bert_version pinned to v3 so joint runs match the separated path and
     # inference/test_csv.py. classifier_version swappable (v1 = paper-ish,
     # v2 = with dropout).
-    {"tag": "LIMU-BERT-X+GRU (frozen)",
-     "mode": "bert", "method": "base_gru", "model_version": "v3_v2",
-     "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 1},
+    # {"tag": "LIMU-BERT-X+GRU (frozen)",
+    #  "mode": "bert", "method": "base_gru", "model_version": "v3_v3",
+    #  "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 1},
     {"tag": "LIMU-BERT-X+GRU (finetune)",
-     "mode": "bert", "method": "base_gru", "model_version": "v3_v2",
+     "mode": "bert", "method": "base_gru", "model_version": "v3_v3",
      "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0},
     # Separated mode: BERT runs in eval/no_grad as a frozen feature extractor
     # (same as inference/test_csv.py), embeddings are cached in memory, then a
     # standalone GRU head is trained via classifier.classify_embeddings.
     {"tag": "LIMU-BERT-X+GRU (separated)",
-     "mode": "bert_separated", "method": "gru", "model_version": "v1",
+     "mode": "bert_separated", "method": "gru", "model_version": "v3",
      "pretrain_model": LIMU_BERTX_CKPT},
 ]
 
