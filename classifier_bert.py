@@ -15,7 +15,7 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 import train
 from config import load_dataset_label_names
 from models import BERTClassifier, fetch_classifier
-from recipe import Recipe, make_criterion
+from recipe import Recipe, build_scheduler, make_criterion
 
 from statistic import stat_acc_f1
 from utils import get_device,  handle_argv \
@@ -51,6 +51,7 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
     classifier = fetch_classifier(method, model_classifier_cfg, input=model_bert_cfg.hidden, output=label_num)
     model = BERTClassifier(model_bert_cfg, classifier=classifier, frozen_bert=frozen_bert)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr * recipe.lr_scale)
+    scheduler = build_scheduler(optimizer, recipe, train_cfg.n_epochs)
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
 
     def func_loss(model, batch):
@@ -70,7 +71,7 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
 
     trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali,
                   model_file=args.pretrain_model, load_self=True,
-                  early_stop_patience=recipe.early_stop_patience)
+                  scheduler=scheduler, early_stop_patience=recipe.early_stop_patience)
     label_estimate_test = trainer.run(func_forward, None, data_loader_test)
     return label_test, label_estimate_test
 

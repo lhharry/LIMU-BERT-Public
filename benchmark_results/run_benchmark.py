@@ -115,6 +115,15 @@ def run_one(run_cfg, label_rate, seed, gpu=None, dry=False):
         cmd += ["--pretrain_model", run_cfg["pretrain_model"]]
     if run_cfg["mode"] == "bert":
         cmd += ["--frozen_bert", str(run_cfg.get("frozen_bert", 1))]
+    # Optional LR schedule overrides (default = no warmup, no cosine).
+    if "warmup_epochs" in run_cfg:
+        cmd += ["--warmup_epochs", str(run_cfg["warmup_epochs"])]
+    if "cosine_decay" in run_cfg:
+        cmd += ["--cosine_decay", str(int(bool(run_cfg["cosine_decay"])))]
+    if "cosine_eta_min" in run_cfg:
+        cmd += ["--cosine_eta_min", str(run_cfg["cosine_eta_min"])]
+    if "early_stop_patience" in run_cfg:
+        cmd += ["--early_stop_patience", str(run_cfg["early_stop_patience"])]
     if gpu is not None:
         cmd += ["--gpu", gpu]
 

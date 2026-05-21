@@ -47,6 +47,14 @@ def main():
     p.add_argument("--balance", type=int, default=0)
     p.add_argument("--frozen_bert", type=int, default=1)
     p.add_argument("--out_json", required=True)
+    p.add_argument("--warmup_epochs", type=int, default=0,
+                   help="Linear LR warmup over this many epochs (0 disables).")
+    p.add_argument("--cosine_decay", type=int, default=0,
+                   help="1 enables cosine LR decay after warmup; 0 disables.")
+    p.add_argument("--cosine_eta_min", type=float, default=1e-6,
+                   help="Absolute floor LR for cosine decay (used when --cosine_decay=1).")
+    p.add_argument("--early_stop_patience", type=int, default=10,
+                   help="Eval epochs without vali F1 improvement before stopping.")
     args_local = p.parse_args()
 
     os.chdir(REPO_ROOT)
@@ -86,7 +94,12 @@ def main():
         sys.argv += ["-f", args_local.pretrain_model]
 
     try:
-        recipe = Recipe.default()
+        recipe = Recipe(
+            early_stop_patience=args_local.early_stop_patience,
+            warmup_epochs=args_local.warmup_epochs,
+            cosine_decay=bool(args_local.cosine_decay),
+            cosine_eta_min=args_local.cosine_eta_min,
+        )
 
         if args_local.mode == "supervised":
             target = "bench_" + args_local.method
@@ -163,7 +176,13 @@ def main():
             "pretrain_model": args_local.pretrain_model,
             "frozen_bert": (None if args_local.mode == "bert_separated"
                             else bool(args_local.frozen_bert)),
-            "recipe": "default",
+            "recipe": {
+                "early_stop_patience": recipe.early_stop_patience,
+                "lr_scale": recipe.lr_scale,
+                "warmup_epochs": recipe.warmup_epochs,
+                "cosine_decay": recipe.cosine_decay,
+                "cosine_eta_min": recipe.cosine_eta_min,
+            },
             "confusion_matrix": matrix.tolist(),
         }
         os.makedirs(os.path.dirname(os.path.abspath(args_local.out_json)), exist_ok=True)
