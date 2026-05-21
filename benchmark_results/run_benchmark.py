@@ -56,28 +56,32 @@ LIMU_BERTX_CKPT = os.path.join(
     "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x.pt"
 )
 
+# model_version convention:
+#   supervised mode      → "<classifier_version>"            e.g. "v1", "v2"
+#   bert / bert_separated → "<bert_version>_<classifier_version>"  e.g. "v3_v1"
+# The classifier_version part picks an entry in config/classifier.json
+# (gru_v1 / gru_v2 / dcnn_v1 / deepsense_v1 / ...). To swap a head per-row,
+# just edit the string below — every entry has its own model_version field.
 RUNS = [
     # --- Supervised baselines (no pretraining) ---
-    {"tag": "DCNN",        "mode": "supervised", "method": "dcnn"},
-    {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense"},
-    {"tag": "R-GRU",       "mode": "supervised", "method": "gru"},
+    {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
+    {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
+    {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v2"},
     # --- LIMU-BERT-X foundation model + GRU head ---
-    # model_version = "<bert_version>_<classifier_version>". Pin to v3_v1 so the
-    # joint runs use the same BERT-base config (v3) as the separated mode and
-    # inference/test_csv.py.
+    # bert_version pinned to v3 so joint runs match the separated path and
+    # inference/test_csv.py. classifier_version swappable (v1 = paper-ish,
+    # v2 = with dropout).
     {"tag": "LIMU-BERT-X+GRU (frozen)",
-     "mode": "bert", "method": "base_gru", "model_version": "v3_v1",
+     "mode": "bert", "method": "base_gru", "model_version": "v3_v2",
      "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 1},
     {"tag": "LIMU-BERT-X+GRU (finetune)",
-     "mode": "bert", "method": "base_gru", "model_version": "v3_v1",
+     "mode": "bert", "method": "base_gru", "model_version": "v3_v2",
      "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0},
     # Separated mode: BERT runs in eval/no_grad as a frozen feature extractor
     # (same as inference/test_csv.py), embeddings are cached in memory, then a
-    # standalone GRU v1 head is trained via classifier.classify_embeddings.
-    # Uses the same Recipe.default() as the other rows so the numbers are
-    # directly comparable.
+    # standalone GRU head is trained via classifier.classify_embeddings.
     {"tag": "LIMU-BERT-X+GRU (separated)",
-     "mode": "bert_separated", "method": "gru",
+     "mode": "bert_separated", "method": "gru", "model_version": "v1",
      "pretrain_model": LIMU_BERTX_CKPT},
 ]
 

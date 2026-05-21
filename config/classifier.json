@@ -52,6 +52,18 @@
 		"activ": false,
 		"dropout": true
 	},
+	"gru_v3":
+	{
+		"seq_len": 20,
+		"input": 6,
+		"num_rnn": 2,
+		"num_layers": [2, 1],
+		"rnn_io": [[6,20], [20, 10]],
+		"num_linear": 2,
+		"linear_io": [[10, 10], [10, 3]],
+		"activ": false,
+		"dropout": true
+	},
 	"cnn2_v1":
 	{
 		"seq_len": 20,
