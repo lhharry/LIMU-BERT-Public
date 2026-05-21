@@ -23,6 +23,7 @@ dataset/camargo_ink_idle/label_20_120.npy
 
 #benchmark results and related logs and plots
 benchmark_results/logs/
+benchmark_results/history/
 benchmark_results/plots/
 benchmark_results/results/*.json
 saved/bench*
