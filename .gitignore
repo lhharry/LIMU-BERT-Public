@@ -7,6 +7,8 @@
 /embed/
 #/saved/
 
+.venv/
+
 # Generated artifacts
 __pycache__/
 *.pyc
