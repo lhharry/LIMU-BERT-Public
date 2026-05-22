@@ -15,7 +15,7 @@ import train
 from config import load_dataset_label_names
 from models import fetch_classifier
 from plot import plot_matrix
-from recipe import Recipe, make_criterion
+from recipe import Recipe, build_scheduler, make_criterion
 from statistic import stat_acc_f1, stat_results
 from utils import get_device, handle_argv, IMUDataset, load_classifier_data_config, \
     FFTDataset, prepare_classifier_dataset, Preprocess4Normalization
@@ -50,6 +50,7 @@ def classify_benchmark(args, label_index, training_rate, label_rate, balance=Tru
     criterion = make_criterion(label_train, label_num, device)
     model = fetch_classifier(method, model_cfg, input=model_cfg.input, output=label_num)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr * recipe.lr_scale)
+    scheduler = build_scheduler(optimizer, recipe, train_cfg.n_epochs)
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
 
     def func_loss(model, batch):
@@ -68,7 +69,7 @@ def classify_benchmark(args, label_index, training_rate, label_rate, balance=Tru
         return stat
 
     trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali,
-                  early_stop_patience=recipe.early_stop_patience)
+                  scheduler=scheduler, early_stop_patience=recipe.early_stop_patience)
     label_estimate_test = trainer.run(func_forward, None, data_loader_test)
     return label_test, label_estimate_test
 

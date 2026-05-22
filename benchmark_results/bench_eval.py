@@ -141,10 +141,11 @@ def main():
             )
 
             # Stage 2: standalone GRU head trained on cached embeddings via
-            # classifier.classify_embeddings using the shared Recipe.default().
-            # Method is hardcoded to "gru" because separated mode = gru_v1 head.
+            # classifier.classify_embeddings using the shared recipe. Method is
+            # hardcoded to "gru"; the head version follows the requested
+            # model_version so it stays aligned with the R-GRU / finetune paths.
             sys.argv = [
-                "bench_eval", "v1",
+                "bench_eval", args_local.model_version,
                 args_local.dataset, args_local.dataset_version,
                 "-t", "config/" + tmp_basename,
                 "-s", args_local.save_model,
