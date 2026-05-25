@@ -391,7 +391,7 @@ def handle_argv(target, config_train, prefix):
     parser = argparse.ArgumentParser(description='PyTorch LIMU-BERT Model')
     parser.add_argument('model_version', type=str, help='Model config')
     parser.add_argument('dataset', type=str, help='Dataset name', choices=['hhar', 'motion', 'uci', 'shoaib', 'camargo'])
-    parser.add_argument('dataset_version',  type=str, help='Dataset version', choices=['10_100', '20_120', '10_20', '10_60', '10_20_dense'])
+    parser.add_argument('dataset_version',  type=str, help='Dataset version', choices=['10_100', '20_120', '10_20', '10_60', '10_20_dense', '10_20_dense_8cls'])
     parser.add_argument('-g', '--gpu', type=str, default=None, help='Set specific GPU')
     parser.add_argument('-f', '--model_file', type=str, default=None, help='Pretrain model file')
     parser.add_argument('-t', '--train_cfg', type=str, default='./config/' + config_train, help='Training config json file path')

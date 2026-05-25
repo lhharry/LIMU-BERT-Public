@@ -12,13 +12,12 @@ a real activity label.
 Final label set (9 classes):
   0: stand
   1: walk
-  2: turn1
-  3: turn2
-  4: jog
-  5: rampascent
-  6: rampdescent
-  7: stairascent
-  8: stairdescent
+  2: turn
+  3: jog
+  4: rampascent
+  5: rampdescent
+  6: stairascent
+  7: stairdescent
 '''
 
 import os
@@ -29,7 +28,7 @@ RAW_SR = 200
 DATASET_PATH = r'D:\01_Code\DATA\OpenSource\AY_Camargo'
 
 # Compact, dense activity set (no transition classes)
-ACTIVITY_NAMES = ["stand", "walk", "turn1", "turn2", "jog",
+ACTIVITY_NAMES = ["stand", "walk", "turn", "jog",
                   "rampascent", "rampdescent",
                   "stairascent", "stairdescent"]
 
@@ -40,8 +39,8 @@ RAW_TO_DENSE = {
     "stand-walk":         "walk",
     "walk":               "walk",
     "walk-stand":         "stand",
-    "turn1":              "turn1",
-    "turn2":              "turn2",
+    "turn1":              "turn",
+    "turn2":              "turn",
     "jog":                "jog",
     "rampascent":         "rampascent",
     "walk-rampascent":    "rampascent",
@@ -161,5 +160,5 @@ def preprocess(path, path_save, version, raw_sr=120, target_sr=10, seq_len=120):
 
 
 path_save = r'camargo'
-version = r'10_20_dense'
+version = r'10_20_dense_8cls'
 data, label = preprocess(DATASET_PATH, path_save, version, raw_sr=RAW_SR, target_sr=10, seq_len=20)

@@ -39,8 +39,8 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 # ---------------------------------------------------------------------------
 
 DATASET = "camargo"
-DATASET_VERSION = "10_20_dense"
-MODEL_VERSION = "v1"
+DATASET_VERSION = "10_20_dense_8cls"
+MODEL_VERSION = "v3"
 TRAINING_RATE = 0.8
 SEEDS = [3431, 42, 2026]
 LABEL_RATES = [0.002 , 0.005, 0.01, 0.02, 0.05, 0.1]
