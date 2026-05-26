@@ -273,6 +273,42 @@ class Preprocess4Normalization(Pipeline):
         return instance_new
 
 
+class Preprocess4Augment(Pipeline):
+    """ Rotation + Gaussian noise augmentation for masked-reconstruction pretraining.
+        Placed before Preprocess4Mask -> both the masked input and the reconstruction
+        target are augmented (stochastic view, not a denoising objective). """
+    def __init__(self, feature_len, rotate=True, p_rotate=0.5, noise=True, noise_std=0.02):
+        super().__init__()
+        self.feature_len = feature_len
+        self.rotate = rotate
+        self.p_rotate = p_rotate
+        self.noise = noise
+        self.noise_std = noise_std
+
+    @staticmethod
+    def _random_rotation():
+        # Uniform random 3D rotation (Rodrigues): random axis + random angle
+        axis = np.random.randn(3)
+        axis /= (np.linalg.norm(axis) + 1e-8)
+        angle = np.random.uniform(0, 2 * np.pi)
+        K = np.array([[0, -axis[2], axis[1]],
+                      [axis[2], 0, -axis[0]],
+                      [-axis[1], axis[0], 0]])
+        return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+
+    def __call__(self, instance):
+        inst = instance.copy()
+        if self.rotate and np.random.rand() < self.p_rotate:
+            R = self._random_rotation()
+            # apply the same rotation to each 3-axis sensor group (acc/gyro/mag) -- rigid body
+            for s in range(0, self.feature_len - self.feature_len % 3, 3):
+                inst[:, s:s + 3] = inst[:, s:s + 3] @ R.T
+        if self.noise:
+            fl = self.feature_len
+            inst[:, :fl] += np.random.normal(0, self.noise_std, inst[:, :fl].shape)
+        return inst
+
+
 class Preprocess4Mask:
     """ Pre-processing steps for pretraining transformer """
     def __init__(self, mask_cfg):

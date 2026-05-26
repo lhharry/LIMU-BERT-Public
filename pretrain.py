@@ -20,18 +20,22 @@ from config import MaskConfig, TrainConfig, PretrainModelConfig
 from models import LIMUBertModel4Pretrain
 from utils import set_seeds, get_device \
     , LIBERTDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
-    prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
+    prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask, Preprocess4Augment
 
 
 def main(args, training_rate):
     data, labels, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
 
-    pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
+    # pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     # pipeline = [Preprocess4Mask(mask_cfg)]
+    # train uses rotation+noise augmentation; test pipeline stays clean (recon loss is a monitor)
+    aug = Preprocess4Augment(model_cfg.feature_num)
+    pipeline_train = [Preprocess4Normalization(model_cfg.feature_num), aug, Preprocess4Mask(mask_cfg)]
+    pipeline_test = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     data_train, label_train, data_test, label_test = prepare_pretrain_dataset(data, labels, training_rate, seed=train_cfg.seed)
 
-    data_set_train = LIBERTDataset4Pretrain(data_train, pipeline=pipeline)
-    data_set_test = LIBERTDataset4Pretrain(data_test, pipeline=pipeline)
+    data_set_train = LIBERTDataset4Pretrain(data_train, pipeline=pipeline_train)
+    data_set_test = LIBERTDataset4Pretrain(data_test, pipeline=pipeline_test)
     data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=train_cfg.batch_size)
     data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size)
     model = LIMUBertModel4Pretrain(model_cfg)

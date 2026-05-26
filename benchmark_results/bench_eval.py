@@ -47,13 +47,13 @@ def main():
     p.add_argument("--balance", type=int, default=0)
     p.add_argument("--frozen_bert", type=int, default=1)
     p.add_argument("--out_json", required=True)
-    p.add_argument("--warmup_epochs", type=int, default=0,
+    p.add_argument("--warmup_epochs", type=int, default=20,
                    help="Linear LR warmup over this many epochs (0 disables).")
-    p.add_argument("--cosine_decay", type=int, default=0,
+    p.add_argument("--cosine_decay", type=int, default=1,
                    help="1 enables cosine LR decay after warmup; 0 disables.")
     p.add_argument("--cosine_eta_min", type=float, default=1e-6,
                    help="Absolute floor LR for cosine decay (used when --cosine_decay=1).")
-    p.add_argument("--early_stop_patience", type=int, default=10,
+    p.add_argument("--early_stop_patience", type=int, default=15,
                    help="Eval epochs without vali F1 improvement before stopping.")
     args_local = p.parse_args()
 
