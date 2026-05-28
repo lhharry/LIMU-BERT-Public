@@ -31,3 +31,7 @@ benchmark_results/results/*.json
 saved/bench*
 saved/*/bench*
 
+# ssl related files
+ssl_compare/logs/
+ssl_compare/history/
+ssl_compare/results/

@@ -79,6 +79,9 @@ def parse_args():
                    help="Must match benchmark TRAINING_RATE so the test split aligns.")
     p.add_argument("--lr", type=float, default=None, help="Override the mode's default LR.")
     p.add_argument("--epochs", type=int, default=None, help="Override the mode's default epoch count.")
+    p.add_argument("--batch_size", type=int, default=None,
+                   help="Override config batch size. Bigger = fewer iters/epoch = faster wall-clock "
+                        "(this tiny model fits large batches). Consider raising --lr with it.")
     p.add_argument("--augment", type=int, default=1,
                    help="1 = rotation+noise augmentation on the train pipeline (held constant "
                         "across modes for a fair comparison); 0 = clean.")
@@ -122,7 +125,8 @@ def build_io(args):
 
 def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
     # TrainConfig is a NamedTuple -> _replace gives an overridden copy.
-    train_cfg = base_train_cfg._replace(seed=seed, lr=args.lr, n_epochs=args.epochs)
+    bs = args.batch_size if args.batch_size else base_train_cfg.batch_size
+    train_cfg = base_train_cfg._replace(seed=seed, lr=args.lr, n_epochs=args.epochs, batch_size=bs)
 
     out_stem = os.path.join(save_dir, "%s_seed%d" % (args.out_name, seed))
     if args.skip_existing and os.path.exists(out_stem + ".pt"):

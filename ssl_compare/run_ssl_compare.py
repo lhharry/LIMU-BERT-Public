@@ -58,6 +58,8 @@ SEEDS = [3431]   # single fixed seed: pretrain and eval both use it -> aligned s
 LABEL_RATES = [0.002, 0.005, 0.01, 0.02, 0.05, 0.1]
 LABEL_INDEX = 0                            # 0 = activity for camargo
 AUGMENT = 1                                # rotation+noise, held constant across SSL modes
+BATCH_SIZE = 512                           # pretrain batch (config default is 128); bigger = faster
+                                           # wall-clock on this tiny model. 16GB easily fits 1024+.
 
 PRETRAIN_DIR = os.path.join("saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION)
 FOUNDATION_CKPT = os.path.join(PRETRAIN_DIR, "limu_bert_x")   # no .pt; loaders re-append it
@@ -123,6 +125,7 @@ def pretrain_phase(modes, gpu, dry, skip_existing):
             "--training_rate", str(TRAINING_RATE),
             "--lr", repr(spec["lr"]),
             "--epochs", str(spec["epochs"]),
+            "--batch_size", str(BATCH_SIZE),
             "--augment", str(AUGMENT),
         ]
         if spec["use_init"]:
