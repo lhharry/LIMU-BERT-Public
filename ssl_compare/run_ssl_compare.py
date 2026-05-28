@@ -64,10 +64,15 @@ BATCH_SIZE = 512                           # pretrain batch (config default is 1
 PRETRAIN_DIR = os.path.join("saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION)
 FOUNDATION_CKPT = os.path.join(PRETRAIN_DIR, "limu_bert_x")   # no .pt; loaders re-append it
 
-# Downstream evaluation path for the SSL rows. "bert_separated" = BERT as a frozen
-# feature extractor + standalone GRU head (closest to a representation-quality probe
-# and matches inference/test_csv.py). Swap to "bert" for joint finetune.
-EVAL_MODE = "bert_separated"
+# Downstream evaluation paths for the SSL rows.
+#   "bert_separated" = BERT in eval/no_grad as a frozen feature extractor +
+#                      standalone GRU head (representation-quality probe; matches
+#                      inference/test_csv.py). Tag stays as the SSL mode name.
+#   "bert"           = joint finetune via classifier_bert.py with --frozen_bert 0
+#                      (BERT + head co-trained). Tag gets a "_ft" suffix so the
+#                      two paths don't collide in logs / JSONs / CSV.
+# List both to produce both rows per SSL mode in one run.
+EVAL_MODES = ["bert_separated", "bert"]
 
 # Per-mode pretraining recipe. lr/epochs forwarded to pretrain_ssl.py (which also
 # has these as defaults); use_init decides whether -f FOUNDATION_CKPT is passed.
@@ -143,10 +148,16 @@ def pretrain_phase(modes, gpu, dry, skip_existing):
 # ---------------------------------------------------------------------------
 # Phase 2: evaluate each row via bench_eval.py
 # ---------------------------------------------------------------------------
-def eval_one(tag, eval_cmd_extra, label_rate, seed, gpu, dry):
+def eval_one(tag, eval_cmd_extra, label_rate, seed, gpu, dry, skip_existing=False):
     rid = "%s__lr%s__seed%d" % (tag.replace(" ", "_"), label_rate, seed)
     log_path = os.path.join(LOG_DIR, "eval_" + rid + ".log")
     json_path = os.path.join(RESULT_DIR, "eval_" + rid + ".json")
+    if skip_existing and os.path.exists(json_path):
+        with open(json_path, "r") as f:
+            r = json.load(f)
+        print("=== skip existing eval: %s ===" % rid)
+        return {"tag": tag, "label_rate": label_rate, "seed": seed,
+                "acc": r.get("acc"), "f1": r.get("f1"), "status": "ok"}
     cmd = [
         sys.executable, BENCH_EVAL,
         "--dataset", DATASET,
@@ -175,21 +186,29 @@ def eval_one(tag, eval_cmd_extra, label_rate, seed, gpu, dry):
 
 
 def build_eval_rows(modes):
-    """Each row -> (tag, function(seed) -> extra bench_eval args)."""
+    """Each row -> (tag, function(seed) -> extra bench_eval args).
+
+    For every SSL mode, emit one row per entry in EVAL_MODES:
+      bert_separated -> tag = "<mode>"        (frozen BERT + GRU probe)
+      bert           -> tag = "<mode>_ft"     (joint finetune)
+    """
     rows = []
     for mode in modes:
-        if EVAL_MODE == "bert_separated":
-            rows.append((mode, lambda seed, m=mode: [
-                "--mode", "bert_separated", "--method", "gru",
-                "--model_version", MODEL_VERSION,
-                "--pretrain_model", ckpt_stem(m, seed),
-            ]))
-        else:  # joint finetune
-            rows.append((mode, lambda seed, m=mode: [
-                "--mode", "bert", "--method", "base_gru",
-                "--model_version", MODEL_VERSION + "_" + MODEL_VERSION,
-                "--pretrain_model", ckpt_stem(m, seed), "--frozen_bert", "0",
-            ]))
+        for eval_mode in EVAL_MODES:
+            if eval_mode == "bert_separated":
+                rows.append((mode, lambda seed, m=mode: [
+                    "--mode", "bert_separated", "--method", "gru",
+                    "--model_version", MODEL_VERSION,
+                    "--pretrain_model", ckpt_stem(m, seed),
+                ]))
+            elif eval_mode == "bert":
+                rows.append((mode + "_ft", lambda seed, m=mode: [
+                    "--mode", "bert", "--method", "base_gru",
+                    "--model_version", MODEL_VERSION + "_" + MODEL_VERSION,
+                    "--pretrain_model", ckpt_stem(m, seed), "--frozen_bert", "0",
+                ]))
+            else:
+                sys.exit("Unknown EVAL_MODES entry: %s" % eval_mode)
     if SUPERVISED_REF is not None:
         ref = SUPERVISED_REF
         rows.append((ref["tag"], lambda seed: [
@@ -199,13 +218,14 @@ def build_eval_rows(modes):
     return rows
 
 
-def eval_phase(modes, label_rates, gpu, dry):
+def eval_phase(modes, label_rates, gpu, dry, skip_existing=False):
     rows = build_eval_rows(modes)
     results = []
     for tag, extra_fn in rows:
         for lr in label_rates:
             for seed in SEEDS:
-                row = eval_one(tag, extra_fn(seed), lr, seed, gpu, dry)
+                row = eval_one(tag, extra_fn(seed), lr, seed, gpu, dry,
+                               skip_existing=skip_existing)
                 if row is not None:
                     results.append(row)
     return results
@@ -253,6 +273,10 @@ def main():
     ap.add_argument("--skip_eval", action="store_true", help="Only run the pretrain phase.")
     ap.add_argument("--skip_existing_ckpt", action="store_true",
                     help="During pretrain, skip seeds whose ckpt already exists.")
+    ap.add_argument("--skip_existing_eval", action="store_true",
+                    help="During eval, reuse rows whose output JSON already exists "
+                         "(useful when adding new EVAL_MODES rows without re-running "
+                         "the ones that already completed).")
     ap.add_argument("--only", default=None,
                     help="Comma-separated SSL modes to include (default: all of scratch,warmstart,dapt).")
     ap.add_argument("--label_rates", default=None, help="Comma-separated override.")
@@ -275,7 +299,8 @@ def main():
         print("Skipping eval phase.")
         return
 
-    results = eval_phase(modes, label_rates, args.gpu, args.dry)
+    results = eval_phase(modes, label_rates, args.gpu, args.dry,
+                         skip_existing=args.skip_existing_eval)
     if not args.dry and results:
         aggregate(results, label_rates)
 
