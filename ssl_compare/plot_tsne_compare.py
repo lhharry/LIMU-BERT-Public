@@ -59,7 +59,7 @@ def parse_args():
     p.add_argument("--n_samples", type=int, default=1500,
                    help="Windows to plot per panel. 1k-2k is usually enough.")
     p.add_argument("--batch_size", type=int, default=512)
-    p.add_argument("--perplexity", type=float, default=30.0,
+    p.add_argument("--perplexity", type=float, default=80.0,
                    help="TSNE perplexity. 30 is sklearn default; try 50 if blobs overlap.")
     p.add_argument("-g", "--gpu", type=str, default=None)
     p.add_argument("--out", type=str, default=None,
