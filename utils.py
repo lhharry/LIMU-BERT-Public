@@ -8,6 +8,7 @@
 
 import argparse
 
+from scipy.interpolate import CubicSpline
 from scipy.special import factorial
 from torch.utils.data import Dataset
 
@@ -274,16 +275,54 @@ class Preprocess4Normalization(Pipeline):
 
 
 class Preprocess4Augment(Pipeline):
-    """ Rotation + Gaussian noise augmentation for masked-reconstruction pretraining.
+    """ Accel-SimCLR style augmentation pack for masked-reconstruction pretraining.
         Placed before Preprocess4Mask -> both the masked input and the reconstruction
-        target are augmented (stochastic view, not a denoising objective). """
-    def __init__(self, feature_len, rotate=True, p_rotate=0.5, noise=True, noise_std=0.02):
+        target are augmented (stochastic view, not a denoising objective).
+
+        The 6 transforms follow Tang et al. 2020 (the set RelCon's distance network
+        uses for accel-semantic invariance). All probabilities are independent, so
+        most calls apply 1-2 transforms rather than all of them.
+
+        Args (all defaults are gentle enough that rotate+noise still dominates,
+        matching prior runs; tune p_* to enable more aggressive mixes):
+          rotate           : random uniform 3D rotation per 3-axis sensor group
+          noise            : per-sample Gaussian jitter (applied last)
+          scale            : per-axis multiplicative scalar ~ N(1, scale_std)
+          mag_warp         : smooth per-channel magnitude curve (cubic spline knots)
+          time_warp        : smooth temporal resampling (monotone cubic spline)
+          permute          : split window into K segments, randomly reorder
+          channel_shuffle  : permute the 3 axes inside each sensor group
+                             (semantics-destroying; default OFF) """
+    def __init__(self, feature_len,
+                 rotate=True, p_rotate=0.5,
+                 noise=True, noise_std=0.02,
+                 scale=True, p_scale=0.5, scale_std=0.1,
+                 mag_warp=True, p_mag_warp=0.3, mag_warp_std=0.2, mag_warp_knots=4,
+                 time_warp=True, p_time_warp=0.3, time_warp_std=0.2, time_warp_knots=4,
+                 permute=True, p_permute=0.2, permute_segments=4,
+                 channel_shuffle=False, p_channel_shuffle=0.0):
         super().__init__()
         self.feature_len = feature_len
         self.rotate = rotate
         self.p_rotate = p_rotate
         self.noise = noise
         self.noise_std = noise_std
+        self.scale = scale
+        self.p_scale = p_scale
+        self.scale_std = scale_std
+        self.mag_warp = mag_warp
+        self.p_mag_warp = p_mag_warp
+        self.mag_warp_std = mag_warp_std
+        self.mag_warp_knots = mag_warp_knots
+        self.time_warp = time_warp
+        self.p_time_warp = p_time_warp
+        self.time_warp_std = time_warp_std
+        self.time_warp_knots = time_warp_knots
+        self.permute = permute
+        self.p_permute = p_permute
+        self.permute_segments = permute_segments
+        self.channel_shuffle = channel_shuffle
+        self.p_channel_shuffle = p_channel_shuffle
 
     @staticmethod
     def _random_rotation():
@@ -296,13 +335,79 @@ class Preprocess4Augment(Pipeline):
                       [-axis[1], axis[0], 0]])
         return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
 
+    def _apply_rotation(self, inst):
+        R = self._random_rotation()
+        for s in range(0, self.feature_len - self.feature_len % 3, 3):
+            inst[:, s:s + 3] = inst[:, s:s + 3] @ R.T
+        return inst
+
+    def _apply_scaling(self, inst):
+        # Per-axis multiplicative scalar; one draw per channel (matches Tang et al.).
+        factors = np.random.normal(1.0, self.scale_std, self.feature_len)
+        inst[:, :self.feature_len] *= factors[None, :]
+        return inst
+
+    def _smooth_curve(self, T, n_knots, std, anchor=1.0):
+        # Cubic spline through n_knots equally-spaced control points; values ~ N(anchor, std).
+        knot_x = np.linspace(0, T - 1, n_knots + 2)
+        knot_y = np.random.normal(anchor, std, n_knots + 2)
+        cs = CubicSpline(knot_x, knot_y)
+        return cs(np.arange(T))
+
+    def _apply_mag_warp(self, inst):
+        T = inst.shape[0]
+        for c in range(self.feature_len):
+            curve = self._smooth_curve(T, self.mag_warp_knots, self.mag_warp_std, anchor=1.0)
+            inst[:, c] *= curve
+        return inst
+
+    def _apply_time_warp(self, inst):
+        # Build a monotone time-warp via cumulative normalization of a positive smooth curve.
+        T = inst.shape[0]
+        speed = self._smooth_curve(T, self.time_warp_knots, self.time_warp_std, anchor=1.0)
+        speed = np.clip(speed, 1e-3, None)
+        cum = np.cumsum(speed)
+        warped_idx = (cum - cum[0]) / (cum[-1] - cum[0]) * (T - 1)
+        orig_idx = np.arange(T)
+        for c in range(self.feature_len):
+            inst[:, c] = np.interp(orig_idx, warped_idx, inst[:, c])
+        return inst
+
+    def _apply_permute(self, inst):
+        T = inst.shape[0]
+        k = min(self.permute_segments, T)
+        if k <= 1:
+            return inst
+        # Random split points; segment lengths >= 1.
+        cuts = sorted(np.random.choice(np.arange(1, T), size=k - 1, replace=False))
+        segs = np.split(inst, cuts, axis=0)
+        order = np.random.permutation(len(segs))
+        inst_new = np.concatenate([segs[i] for i in order], axis=0)
+        # Only mutate the feature columns; any extra cols (labels etc.) are untouched
+        # because instance is feature-only here (see IMUDataset / LIBERTDataset4Pretrain).
+        return inst_new
+
+    def _apply_channel_shuffle(self, inst):
+        for s in range(0, self.feature_len - self.feature_len % 3, 3):
+            perm = np.random.permutation(3)
+            inst[:, s:s + 3] = inst[:, s:s + 3][:, perm]
+        return inst
+
     def __call__(self, instance):
         inst = instance.copy()
         if self.rotate and np.random.rand() < self.p_rotate:
-            R = self._random_rotation()
-            # apply the same rotation to each 3-axis sensor group (acc/gyro/mag) -- rigid body
-            for s in range(0, self.feature_len - self.feature_len % 3, 3):
-                inst[:, s:s + 3] = inst[:, s:s + 3] @ R.T
+            inst = self._apply_rotation(inst)
+        if self.scale and np.random.rand() < self.p_scale:
+            inst = self._apply_scaling(inst)
+        if self.mag_warp and np.random.rand() < self.p_mag_warp:
+            inst = self._apply_mag_warp(inst)
+        if self.time_warp and np.random.rand() < self.p_time_warp:
+            inst = self._apply_time_warp(inst)
+        if self.permute and np.random.rand() < self.p_permute:
+            inst = self._apply_permute(inst)
+        if self.channel_shuffle and np.random.rand() < self.p_channel_shuffle:
+            inst = self._apply_channel_shuffle(inst)
+        # Noise applied last so it isn't smoothed away by warp/permute.
         if self.noise:
             fl = self.feature_len
             inst[:, :fl] += np.random.normal(0, self.noise_std, inst[:, :fl].shape)

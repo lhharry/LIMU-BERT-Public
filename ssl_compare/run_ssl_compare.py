@@ -103,7 +103,7 @@ def stream_subprocess(cmd, log_path, dry):
     with open(log_path, "w", encoding="utf-8") as logf:
         logf.write(header + "\n")
         logf.flush()
-        # Force the child to unbuffered stdout/stderr so per-epoch prints stream
+          # Force the child to unbuffered stdout/stderr so per-epoch prints stream
         # out immediately. Without this, Python block-buffers stdout when it's a
         # pipe (not a tty) and the parent loop appears to hang.
         env = os.environ.copy()
