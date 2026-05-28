@@ -103,9 +103,14 @@ def stream_subprocess(cmd, log_path, dry):
     with open(log_path, "w", encoding="utf-8") as logf:
         logf.write(header + "\n")
         logf.flush()
+        # Force the child to unbuffered stdout/stderr so per-epoch prints stream
+        # out immediately. Without this, Python block-buffers stdout when it's a
+        # pipe (not a tty) and the parent loop appears to hang.
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
         proc = subprocess.Popen(cmd, cwd=REPO_ROOT, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, bufsize=1,
-                                encoding="utf-8", errors="replace")
+                                encoding="utf-8", errors="replace", env=env)
         for line in proc.stdout:
             sys.stdout.write(line)
             logf.write(line)
@@ -123,7 +128,7 @@ def pretrain_phase(modes, gpu, dry, skip_existing):
     for mode in modes:
         spec = SSL_MODES[mode]
         cmd = [
-            sys.executable, PRETRAIN_SSL,
+            sys.executable, "-u", PRETRAIN_SSL,
             MODEL_VERSION, DATASET, DATASET_VERSION,
             "--mode", mode,
             "--seeds", seeds_arg,
@@ -159,7 +164,7 @@ def eval_one(tag, eval_cmd_extra, label_rate, seed, gpu, dry, skip_existing=Fals
         return {"tag": tag, "label_rate": label_rate, "seed": seed,
                 "acc": r.get("acc"), "f1": r.get("f1"), "status": "ok"}
     cmd = [
-        sys.executable, BENCH_EVAL,
+        sys.executable, "-u", BENCH_EVAL,
         "--dataset", DATASET,
         "--dataset_version", DATASET_VERSION,
         "--label_rate", str(label_rate),
