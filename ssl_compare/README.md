@@ -79,8 +79,7 @@ python ssl_compare/plot_tsne_compare.py -g 0 \
     --out ssl_compare/history/<run-dir>/tsne_compare.png
 
 # one-figure summary of a run: loss curves + F1 vs label_rate
-python ssl_compare/plot_run_summary.py \
-    --run_dir ssl_compare/history/<run-dir> \
+python ssl_compare/plot_run_summary.py --run_dir ssl_compare/history/<run-dir> \
     --out ssl_compare/history/<run-dir>/run_summary.png
 ```
 

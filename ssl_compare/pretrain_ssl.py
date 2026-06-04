@@ -61,9 +61,12 @@ def parse_args():
     p = argparse.ArgumentParser(description="Unified in-domain SSL pretraining (scratch/warmstart/dapt)")
     # Positional args mirror handle_argv (pretrain.py) so configs resolve identically.
     p.add_argument("model_version", type=str, help="BERT config version, e.g. v3 (-> base_v3)")
-    p.add_argument("dataset", type=str, choices=["hhar", "motion", "uci", "shoaib", "camargo"])
+    p.add_argument("dataset", type=str,
+                   choices=["hhar", "motion", "uci", "shoaib", "camargo",
+                            "molinaro", "scherpereel", "scherpereel_exo"])
     p.add_argument("dataset_version", type=str,
-                   choices=["10_100", "20_120", "10_20", "10_60", "10_20_dense", "10_20_dense_8cls"])
+                   choices=["10_100", "20_120", "10_20", "10_60", "10_20_dense",
+                            "10_20_dense_8cls", "10_20_both"])
     p.add_argument("--mode", required=True, choices=list(MODE_DEFAULTS.keys()))
     p.add_argument("-f", "--model_file", type=str, default=None,
                    help="Starting checkpoint for warmstart/dapt, e.g. "
@@ -85,6 +88,13 @@ def parse_args():
     p.add_argument("--augment", type=int, default=1,
                    help="1 = rotation+noise augmentation on the train pipeline (held constant "
                         "across modes for a fair comparison); 0 = clean.")
+    p.add_argument("--merge", type=str, default=None,
+                   help="Comma-separated dataset:version specs to MERGE into ONE pretraining run, "
+                        "e.g. 'camargo:10_20_dense_8cls,molinaro:10_20_both,scherpereel:10_20_both,"
+                        "scherpereel_exo:10_20_both'. Each is split with the SAME seed and its "
+                        "train+vali concatenated (test held out per dataset, so the downstream "
+                        "per-dataset test split stays unseen). When set, the positional "
+                        "dataset/version only pick the model config + save dir.")
     p.add_argument("--out_name", type=str, default=None,
                    help="Output ckpt name stem (default = --mode); final file is <stem>_seed<seed>.pt.")
     p.add_argument("--skip_existing", action="store_true",
@@ -134,12 +144,32 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
         return out_stem + ".pt"
 
     set_seeds(seed)
-    data = np.load(args.data_path).astype(np.float32)
-    labels = np.load(args.label_path).astype(np.float32)
+    if args.merge:
+        # Merge several datasets into ONE pretraining pool. Each is split with the
+        # SAME seed (prepare_pretrain_dataset resets the RNG per call), so every
+        # dataset's last-10% test split matches its bench_eval split and is held
+        # out here -> no leakage. All datasets are (N, 20, 6), so they concatenate.
+        specs = [s.strip() for s in args.merge.split(",") if s.strip()]
+        train_parts, vali_parts = [], []
+        for spec in specs:
+            ds, ver = spec.split(":")
+            dpath = os.path.join(REPO_ROOT, "dataset", ds, "data_" + ver + ".npy")
+            lpath = os.path.join(REPO_ROOT, "dataset", ds, "label_" + ver + ".npy")
+            d = np.load(dpath).astype(np.float32)
+            l = np.load(lpath).astype(np.float32)
+            dt, _, dv, _ = prepare_pretrain_dataset(d, l, args.training_rate, seed=seed)
+            train_parts.append(dt)
+            vali_parts.append(dv)
+            print("  merge %-30s train=%6d vali=%6d" % (spec, dt.shape[0], dv.shape[0]))
+        data_train = np.concatenate(train_parts, 0)
+        data_vali = np.concatenate(vali_parts, 0)
+    else:
+        data = np.load(args.data_path).astype(np.float32)
+        labels = np.load(args.label_path).astype(np.float32)
 
-    # Same seed + same partition as the classifier path => identical train/vali/test
-    # split. The 10% test is NOT returned here, so it is held out of pretraining.
-    data_train, _, data_vali, _ = prepare_pretrain_dataset(data, labels, args.training_rate, seed=seed)
+        # Same seed + same partition as the classifier path => identical train/vali/test
+        # split. The 10% test is NOT returned here, so it is held out of pretraining.
+        data_train, _, data_vali, _ = prepare_pretrain_dataset(data, labels, args.training_rate, seed=seed)
 
     norm = Preprocess4Normalization(args.model_cfg.feature_num)
     mask = Preprocess4Mask(mask_cfg)

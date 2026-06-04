@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 RAW_SR = 200
-DATASET_PATH = r'D:\01_Code\DATA\OpenSource\AY_Camargo'
+DATASET_PATH = r'D:\01_Code\DATA\OpenSource\01_Camargo\dataset'
 
 # Compact, dense activity set (no transition classes)
 ACTIVITY_NAMES = ["stand", "walk", "turn", "jog",
@@ -116,7 +116,8 @@ def load_sensor_data(path, seq_len, raw_sr, target_sr):
                     continue
                 path_exp = os.path.join(path_sub, name)
                 df = pd.read_csv(path_exp)
-                sensor = df[SENSOR_COLS].values
+                sensor = df[SENSOR_COLS].values.astype(float)
+                sensor[:, :3] *= 9.81  # g → m/s², matching motion.py and uci.py convention
                 acts_raw = df['Label'].values
 
                 # Remap raw labels (incl. transitions) to dense indices FIRST,

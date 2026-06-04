@@ -130,8 +130,108 @@
     "model_label_index": -1,
     "model_label_size": 0,
     "size": 21371
+    },
+
+    "scherpereel_10_20": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 26,
+        "activity_label": [
+            "ball_toss", "curb_down", "curb_up", "cutting", "dynamic_walk",
+            "incline_walk", "jump", "lift_weight", "lunges", "meander",
+            "normal_walk", "obstacle_walk", "poses", "push", "side_shuffle",
+            "sit_to_stand", "squats", "stairs", "start_stop", "step_ups",
+            "tire_run", "tug_of_war", "turn_and_step", "twister",
+            "walk_backward", "weighted_walk"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 12,
+        "size": 6096
+    },
+
+    "scherpereel_10_20_both": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 26,
+        "activity_label": [
+            "ball_toss", "curb_down", "curb_up", "cutting", "dynamic_walk",
+            "incline_walk", "jump", "lift_weight", "lunges", "meander",
+            "normal_walk", "obstacle_walk", "poses", "push", "side_shuffle",
+            "sit_to_stand", "squats", "stairs", "start_stop", "step_ups",
+            "tire_run", "tug_of_war", "turn_and_step", "twister",
+            "walk_backward", "weighted_walk"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 12,
+        "size": 12184
+    },
+
+    "scherpereel_exo_10_20": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 26,
+        "activity_label": [
+            "ball_toss", "curb_down", "curb_up", "cutting", "dynamic_walk",
+            "incline_walk", "jump", "lift_weight", "lunges", "meander",
+            "normal_walk", "obstacle_walk", "poses", "push", "side_shuffle",
+            "sit_to_stand", "squats", "stairs", "start_stop", "step_ups",
+            "tire_run", "tug_of_war", "turn_and_step", "twister",
+            "walk_backward", "weighted_walk"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 17,
+        "size": 23032
+    },
+
+    "scherpereel_exo_10_20_both": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 26,
+        "activity_label": [
+            "ball_toss", "curb_down", "curb_up", "cutting", "dynamic_walk",
+            "incline_walk", "jump", "lift_weight", "lunges", "meander",
+            "normal_walk", "obstacle_walk", "poses", "push", "side_shuffle",
+            "sit_to_stand", "squats", "stairs", "start_stop", "step_ups",
+            "tire_run", "tug_of_war", "turn_and_step", "twister",
+            "walk_backward", "weighted_walk"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 17,
+        "size": 46064
+    },
+
+    "molinaro_10_20": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 6,
+        "activity_label": ["LG", "RA", "RD", "SA", "SD", "ST"],
+        "user_label_index": 1,
+        "user_label_size": 25,
+        "size": 12276
+    },
+
+    "molinaro_10_20_both": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 6,
+        "activity_label": ["LG", "RA", "RD", "SA", "SD", "ST"],
+        "user_label_index": 1,
+        "user_label_size": 25,
+        "size": 24552
     }
-    
+
 }
 
 
