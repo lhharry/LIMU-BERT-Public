@@ -55,6 +55,16 @@ def main():
                    help="Absolute floor LR for cosine decay (used when --cosine_decay=1).")
     p.add_argument("--early_stop_patience", type=int, default=15,
                    help="Eval epochs without vali F1 improvement before stopping.")
+    p.add_argument("--split", choices=["random", "group"], default="random",
+                   help="random = legacy window shuffle; group = subject-grouped CV fold.")
+    p.add_argument("--group_label_index", type=int, default=1,
+                   help="Label column holding the group/subject id (camargo: 1).")
+    p.add_argument("--fold_id", type=int, default=0, help="Which CV fold (group split).")
+    p.add_argument("--n_folds", type=int, default=5, help="Number of CV folds (group split).")
+    p.add_argument("--split_seed", type=int, default=3431,
+                   help="Fixed seed defining the fold partition; independent of model seed.")
+    p.add_argument("--n_epochs", type=int, default=None,
+                   help="Override n_epochs from the base train config (e.g. fast smoke tests).")
     args_local = p.parse_args()
 
     os.chdir(REPO_ROOT)
@@ -63,6 +73,8 @@ def main():
     with open(base_cfg, "r") as f:
         cfg = json.load(f)
     cfg["seed"] = args_local.seed
+    if args_local.n_epochs is not None:
+        cfg["n_epochs"] = args_local.n_epochs
     tmp_dir = os.path.join(REPO_ROOT, "config")
     tmp = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, dir=tmp_dir, prefix="bench_tmp_")
     json.dump(cfg, tmp)
@@ -101,12 +113,19 @@ def main():
             cosine_eta_min=args_local.cosine_eta_min,
         )
 
+        # Split config shared by all three paths (subject-grouped CV vs legacy random).
+        split_kwargs = dict(
+            split=args_local.split, group_label_index=args_local.group_label_index,
+            fold_id=args_local.fold_id, n_folds=args_local.n_folds, split_seed=args_local.split_seed,
+        )
+
         if args_local.mode == "supervised":
             target = "bench_" + args_local.method
             args = handle_argv(target, tmp_basename, args_local.method)
             label_test, preds = classify_benchmark(
                 args, args.label_index, args_local.training_rate, args_local.label_rate,
                 balance=bool(args_local.balance), method=args_local.method, recipe=recipe,
+                **split_kwargs,
             )
         elif args_local.mode == "bert":
             target = "bert_classifier_" + args_local.method
@@ -115,7 +134,7 @@ def main():
             label_test, preds = classifier_bert.bert_classify(
                 args, args.label_index, args_local.training_rate, args_local.label_rate,
                 frozen_bert=bool(args_local.frozen_bert), balance=bool(args_local.balance),
-                recipe=recipe,
+                recipe=recipe, **split_kwargs,
             )
         else:  # bert_separated
             if not args_local.pretrain_model:
@@ -160,6 +179,7 @@ def main():
                 cls_args, embeddings, all_labels, cls_args.label_index,
                 args_local.training_rate, args_local.label_rate,
                 balance=bool(args_local.balance), method="gru", recipe=recipe,
+                **split_kwargs,
             )
 
         acc, matrix, f1 = stat_results(label_test, preds)
@@ -183,6 +203,13 @@ def main():
                 "warmup_epochs": recipe.warmup_epochs,
                 "cosine_decay": recipe.cosine_decay,
                 "cosine_eta_min": recipe.cosine_eta_min,
+            },
+            "split": {
+                "mode": args_local.split,
+                "group_label_index": args_local.group_label_index,
+                "fold_id": args_local.fold_id,
+                "n_folds": args_local.n_folds,
+                "split_seed": args_local.split_seed,
             },
             "confusion_matrix": matrix.tolist(),
         }

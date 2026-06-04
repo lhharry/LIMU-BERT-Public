@@ -99,6 +99,18 @@ def parse_args():
                    help="Output ckpt name stem (default = --mode); final file is <stem>_seed<seed>.pt.")
     p.add_argument("--skip_existing", action="store_true",
                    help="Skip a seed whose output checkpoint already exists.")
+    p.add_argument("--split", choices=["random", "group"], default="random",
+                   help="random = legacy window shuffle; group = subject-grouped CV holdout.")
+    p.add_argument("--group_label_index", type=int, default=1,
+                   help="Label column holding the group/subject id (camargo: 1).")
+    p.add_argument("--fold_id", type=int, default=0, help="Which CV fold (group split).")
+    p.add_argument("--n_folds", type=int, default=5, help="Number of CV folds (group split).")
+    p.add_argument("--split_seed", type=int, default=3431,
+                   help="Fixed seed defining the fold partition; independent of model seed.")
+    p.add_argument("--holdout_dataset", type=str, default=None,
+                   help="Under --split group: ONLY this dataset's test fold is held out of the "
+                        "SSL pool (the one that will be evaluated). Other merged datasets are used "
+                        "in full (never evaluated). Defaults to the positional dataset.")
     return p.parse_args()
 
 
@@ -138,7 +150,10 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
     bs = args.batch_size if args.batch_size else base_train_cfg.batch_size
     train_cfg = base_train_cfg._replace(seed=seed, lr=args.lr, n_epochs=args.epochs, batch_size=bs)
 
-    out_stem = os.path.join(save_dir, "%s_seed%d" % (args.out_name, seed))
+    if args.split == "group":
+        out_stem = os.path.join(save_dir, "%s_fold%d_seed%d" % (args.out_name, args.fold_id, seed))
+    else:
+        out_stem = os.path.join(save_dir, "%s_seed%d" % (args.out_name, seed))
     if args.skip_existing and os.path.exists(out_stem + ".pt"):
         print("Skipping existing checkpoint -> %s.pt" % out_stem)
         return out_stem + ".pt"
@@ -150,6 +165,7 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
         # dataset's last-10% test split matches its bench_eval split and is held
         # out here -> no leakage. All datasets are (N, 20, 6), so they concatenate.
         specs = [s.strip() for s in args.merge.split(",") if s.strip()]
+        holdout = args.holdout_dataset or args.dataset
         train_parts, vali_parts = [], []
         for spec in specs:
             ds, ver = spec.split(":")
@@ -157,19 +173,32 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
             lpath = os.path.join(REPO_ROOT, "dataset", ds, "label_" + ver + ".npy")
             d = np.load(dpath).astype(np.float32)
             l = np.load(lpath).astype(np.float32)
-            dt, _, dv, _ = prepare_pretrain_dataset(d, l, args.training_rate, seed=seed)
-            train_parts.append(dt)
-            vali_parts.append(dv)
-            print("  merge %-30s train=%6d vali=%6d" % (spec, dt.shape[0], dv.shape[0]))
+            if args.split == "group" and ds != holdout:
+                # Refinement B: this dataset is never evaluated -> use ALL its windows
+                # for SSL, no fold holdout (only the holdout dataset's test fold is excluded).
+                train_parts.append(d)
+                print("  merge %-30s train=%6d vali=%6d (full, no holdout)" % (spec, d.shape[0], 0))
+            else:
+                dt, _, dv, _ = prepare_pretrain_dataset(
+                    d, l, args.training_rate, seed=seed, split=args.split,
+                    group_label_index=args.group_label_index, fold_id=args.fold_id,
+                    n_folds=args.n_folds, split_seed=args.split_seed)
+                train_parts.append(dt)
+                vali_parts.append(dv)
+                tag = "  [HOLDOUT fold %d/%d]" % (args.fold_id, args.n_folds) if args.split == "group" else ""
+                print("  merge %-30s train=%6d vali=%6d%s" % (spec, dt.shape[0], dv.shape[0], tag))
         data_train = np.concatenate(train_parts, 0)
-        data_vali = np.concatenate(vali_parts, 0)
+        data_vali = np.concatenate(vali_parts, 0) if vali_parts else data_train[:0]
     else:
         data = np.load(args.data_path).astype(np.float32)
         labels = np.load(args.label_path).astype(np.float32)
 
         # Same seed + same partition as the classifier path => identical train/vali/test
-        # split. The 10% test is NOT returned here, so it is held out of pretraining.
-        data_train, _, data_vali, _ = prepare_pretrain_dataset(data, labels, args.training_rate, seed=seed)
+        # split. The test split is NOT returned here, so it is held out of pretraining.
+        data_train, _, data_vali, _ = prepare_pretrain_dataset(
+            data, labels, args.training_rate, seed=seed, split=args.split,
+            group_label_index=args.group_label_index, fold_id=args.fold_id,
+            n_folds=args.n_folds, split_seed=args.split_seed)
 
     norm = Preprocess4Normalization(args.model_cfg.feature_num)
     mask = Preprocess4Mask(mask_cfg)

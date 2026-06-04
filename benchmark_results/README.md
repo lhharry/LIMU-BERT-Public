@@ -85,6 +85,15 @@ Open `run_benchmark.py` and edit the constants at the top:
   via subprocess. All three accept a `recipe` argument (see `recipe.py`);
   `bench_eval.py` builds one `Recipe` (from its CLI flags) per run and passes
   it to every path so the comparison is fair.
+- `bench_eval.py` also accepts `--split {random,group}` (subject-grouped CV;
+  `--group_label_index 1 --fold_id F --n_folds 5 --split_seed 3431`) and
+  `--n_epochs N` (override the config epoch budget). All three paths thread the
+  same split config into `prepare_classifier_dataset`, so R-GRU / finetune /
+  separated probe are evaluated on the identical fold. The chosen split is
+  recorded under the `split` key in each output JSON. See
+  `ssl_compare/README.md` → "Subject-grouped cross-validation (v3)" for why and
+  the anti-leakage rules (grouped ckpts are fold-tagged; old random-split ckpts
+  must not be reused under a grouped eval).
 - Each run writes a temporary `config/bench_tmp_*.json` so the seed can be
   overridden cleanly; the file is removed when the run finishes.
 - `bench_eval.py` sets `classifier_bert.method` before calling `bert_classify`

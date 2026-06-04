@@ -58,7 +58,7 @@ TRAINING_RATE = 0.8
 SEEDS = [3431]   # single fixed seed: pretrain and eval both use it -> aligned split, no leakage
 LABEL_RATES = [0.002, 0.005, 0.01, 0.02, 0.05, 0.1]
 AUGMENT = 0                                # rotation+noise, held constant
-BATCH_SIZE = 512                           # pretrain batch (config default is 128); bigger = faster
+BATCH_SIZE = 128                           # pretrain batch (config default is 128); bigger = faster
 
 # Datasets MERGED into the single warmstart pretraining pool. (dataset, version).
 # All four are concatenated (foundation init + full lr/epochs in-domain SSL), but

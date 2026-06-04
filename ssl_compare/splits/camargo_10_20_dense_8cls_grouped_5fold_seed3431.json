@@ -1,0 +1,347 @@
+{
+  "dataset": "camargo",
+  "dataset_version": "10_20_dense_8cls",
+  "n_folds": 5,
+  "split_seed": 3431,
+  "group_label_index": 1,
+  "subjects": [
+    5,
+    6,
+    7,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    22,
+    23,
+    24,
+    26,
+    27,
+    29
+  ],
+  "folds": [
+    {
+      "fold_id": 0,
+      "train_groups": [
+        5,
+        6,
+        7,
+        10,
+        12,
+        16,
+        17,
+        19,
+        20,
+        23,
+        24,
+        29
+      ],
+      "vali_groups": [
+        9,
+        11,
+        15,
+        27
+      ],
+      "test_groups": [
+        13,
+        14,
+        18,
+        22,
+        26
+      ],
+      "train_windows": 12260,
+      "vali_windows": 4151,
+      "test_windows": 4960,
+      "train_class_counts": {
+        "stand": 671,
+        "walk": 5078,
+        "turn": 578,
+        "jog": 2217,
+        "rampascent": 1274,
+        "rampdescent": 1364,
+        "stairascent": 561,
+        "stairdescent": 517
+      },
+      "vali_class_counts": {
+        "stand": 228,
+        "walk": 1707,
+        "turn": 221,
+        "jog": 680,
+        "rampascent": 460,
+        "rampdescent": 502,
+        "stairascent": 186,
+        "stairdescent": 167
+      },
+      "test_class_counts": {
+        "stand": 289,
+        "walk": 2052,
+        "turn": 239,
+        "jog": 850,
+        "rampascent": 562,
+        "rampdescent": 544,
+        "stairascent": 218,
+        "stairdescent": 206
+      }
+    },
+    {
+      "fold_id": 1,
+      "train_groups": [
+        5,
+        6,
+        10,
+        12,
+        13,
+        14,
+        17,
+        18,
+        20,
+        22,
+        23,
+        26,
+        29
+      ],
+      "vali_groups": [
+        7,
+        16,
+        19,
+        24
+      ],
+      "test_groups": [
+        9,
+        11,
+        15,
+        27
+      ],
+      "train_windows": 13264,
+      "vali_windows": 3956,
+      "test_windows": 4151,
+      "train_class_counts": {
+        "stand": 781,
+        "walk": 5393,
+        "turn": 605,
+        "jog": 2387,
+        "rampascent": 1446,
+        "rampdescent": 1490,
+        "stairascent": 605,
+        "stairdescent": 557
+      },
+      "vali_class_counts": {
+        "stand": 179,
+        "walk": 1737,
+        "turn": 212,
+        "jog": 680,
+        "rampascent": 390,
+        "rampdescent": 418,
+        "stairascent": 174,
+        "stairdescent": 166
+      },
+      "test_class_counts": {
+        "stand": 228,
+        "walk": 1707,
+        "turn": 221,
+        "jog": 680,
+        "rampascent": 460,
+        "rampdescent": 502,
+        "stairascent": 186,
+        "stairdescent": 167
+      }
+    },
+    {
+      "fold_id": 2,
+      "train_groups": [
+        6,
+        9,
+        11,
+        12,
+        13,
+        14,
+        15,
+        17,
+        18,
+        20,
+        22,
+        26,
+        27
+      ],
+      "vali_groups": [
+        5,
+        10,
+        23,
+        29
+      ],
+      "test_groups": [
+        7,
+        16,
+        19,
+        24
+      ],
+      "train_windows": 13202,
+      "vali_windows": 4213,
+      "test_windows": 3956,
+      "train_class_counts": {
+        "stand": 753,
+        "walk": 5440,
+        "turn": 637,
+        "jog": 2315,
+        "rampascent": 1441,
+        "rampdescent": 1519,
+        "stairascent": 579,
+        "stairdescent": 518
+      },
+      "vali_class_counts": {
+        "stand": 256,
+        "walk": 1660,
+        "turn": 189,
+        "jog": 752,
+        "rampascent": 465,
+        "rampdescent": 473,
+        "stairascent": 212,
+        "stairdescent": 206
+      },
+      "test_class_counts": {
+        "stand": 179,
+        "walk": 1737,
+        "turn": 212,
+        "jog": 680,
+        "rampascent": 390,
+        "rampdescent": 418,
+        "stairascent": 174,
+        "stairdescent": 166
+      }
+    },
+    {
+      "fold_id": 3,
+      "train_groups": [
+        7,
+        9,
+        11,
+        13,
+        14,
+        15,
+        16,
+        18,
+        19,
+        22,
+        24,
+        26,
+        27
+      ],
+      "vali_groups": [
+        6,
+        12,
+        17,
+        20
+      ],
+      "test_groups": [
+        5,
+        10,
+        23,
+        29
+      ],
+      "train_windows": 13067,
+      "vali_windows": 4091,
+      "test_windows": 4213,
+      "train_class_counts": {
+        "stand": 696,
+        "walk": 5496,
+        "turn": 672,
+        "jog": 2210,
+        "rampascent": 1412,
+        "rampdescent": 1464,
+        "stairascent": 578,
+        "stairdescent": 539
+      },
+      "vali_class_counts": {
+        "stand": 236,
+        "walk": 1681,
+        "turn": 177,
+        "jog": 785,
+        "rampascent": 419,
+        "rampdescent": 473,
+        "stairascent": 175,
+        "stairdescent": 145
+      },
+      "test_class_counts": {
+        "stand": 256,
+        "walk": 1660,
+        "turn": 189,
+        "jog": 752,
+        "rampascent": 465,
+        "rampdescent": 473,
+        "stairascent": 212,
+        "stairdescent": 206
+      }
+    },
+    {
+      "fold_id": 4,
+      "train_groups": [
+        5,
+        7,
+        9,
+        10,
+        11,
+        15,
+        16,
+        19,
+        23,
+        24,
+        27,
+        29
+      ],
+      "vali_groups": [
+        13,
+        14,
+        18,
+        22,
+        26
+      ],
+      "test_groups": [
+        6,
+        12,
+        17,
+        20
+      ],
+      "train_windows": 12320,
+      "vali_windows": 4960,
+      "test_windows": 4091,
+      "train_class_counts": {
+        "stand": 663,
+        "walk": 5104,
+        "turn": 622,
+        "jog": 2112,
+        "rampascent": 1315,
+        "rampdescent": 1393,
+        "stairascent": 572,
+        "stairdescent": 539
+      },
+      "vali_class_counts": {
+        "stand": 289,
+        "walk": 2052,
+        "turn": 239,
+        "jog": 850,
+        "rampascent": 562,
+        "rampdescent": 544,
+        "stairascent": 218,
+        "stairdescent": 206
+      },
+      "test_class_counts": {
+        "stand": 236,
+        "walk": 1681,
+        "turn": 177,
+        "jog": 785,
+        "rampascent": 419,
+        "rampdescent": 473,
+        "stairascent": 175,
+        "stairdescent": 145
+      }
+    }
+  ]
+}

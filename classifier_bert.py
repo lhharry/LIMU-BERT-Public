@@ -23,7 +23,8 @@ from utils import get_device,  handle_argv \
     prepare_classifier_dataset
 
 
-def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=False, balance=True, recipe=None):
+def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=False, balance=True, recipe=None,
+                  split="random", group_label_index=1, fold_id=0, n_folds=5, split_seed=3431):
     if recipe is None:
         recipe = Recipe.default()
 
@@ -34,6 +35,8 @@ def bert_classify(args, label_index, training_rate, label_rate, frozen_bert=Fals
         data, labels, label_index=label_index, training_rate=training_rate,
         label_rate=label_rate, merge=model_classifier_cfg.seq_len,
         seed=train_cfg.seed, balance=balance,
+        split=split, group_label_index=group_label_index,
+        fold_id=fold_id, n_folds=n_folds, split_seed=split_seed,
     )
     data_train, label_train, data_vali, label_vali, data_test, label_test = splits
 

@@ -21,7 +21,8 @@ from utils import get_device, handle_argv, IMUDataset, load_classifier_data_conf
     FFTDataset, prepare_classifier_dataset, Preprocess4Normalization
 
 
-def classify_benchmark(args, label_index, training_rate, label_rate, balance=True, method=None, recipe=None):
+def classify_benchmark(args, label_index, training_rate, label_rate, balance=True, method=None, recipe=None,
+                       split="random", group_label_index=1, fold_id=0, n_folds=5, split_seed=3431):
     if recipe is None:
         recipe = Recipe.default()
 
@@ -31,6 +32,8 @@ def classify_benchmark(args, label_index, training_rate, label_rate, balance=Tru
         data, labels, label_index=label_index, training_rate=training_rate,
         label_rate=label_rate, merge=model_cfg.seq_len,
         seed=train_cfg.seed, balance=balance,
+        split=split, group_label_index=group_label_index,
+        fold_id=fold_id, n_folds=n_folds, split_seed=split_seed,
     )
     data_train, label_train, data_vali, label_vali, data_test, label_test = splits
     pipeline = [Preprocess4Normalization(model_cfg.input)]

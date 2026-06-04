@@ -1,0 +1,110 @@
+{
+  "acc": 0.3034274193548387,
+  "f1": 0.24761591433268496,
+  "mode": "supervised",
+  "method": "gru",
+  "model_version": "v3",
+  "dataset": "camargo",
+  "dataset_version": "10_20_dense_8cls",
+  "label_rate": 0.05,
+  "training_rate": 0.8,
+  "seed": 3431,
+  "pretrain_model": null,
+  "frozen_bert": true,
+  "recipe": {
+    "early_stop_patience": 15,
+    "lr_scale": 1,
+    "warmup_epochs": 20,
+    "cosine_decay": true,
+    "cosine_eta_min": 1e-06
+  },
+  "split": {
+    "mode": "group",
+    "group_label_index": 1,
+    "fold_id": 0,
+    "n_folds": 5,
+    "split_seed": 3431
+  },
+  "confusion_matrix": [
+    [
+      256,
+      1,
+      1,
+      11,
+      1,
+      5,
+      13,
+      1
+    ],
+    [
+      1120,
+      14,
+      40,
+      391,
+      80,
+      241,
+      117,
+      49
+    ],
+    [
+      97,
+      0,
+      6,
+      76,
+      14,
+      26,
+      14,
+      6
+    ],
+    [
+      4,
+      0,
+      6,
+      838,
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      31,
+      1,
+      9,
+      219,
+      194,
+      43,
+      61,
+      4
+    ],
+    [
+      215,
+      1,
+      1,
+      94,
+      25,
+      95,
+      65,
+      48
+    ],
+    [
+      34,
+      0,
+      0,
+      20,
+      48,
+      34,
+      74,
+      8
+    ],
+    [
+      135,
+      0,
+      0,
+      0,
+      4,
+      27,
+      12,
+      28
+    ]
+  ]
+}

@@ -126,21 +126,38 @@ def shuffle_data_label(data, label):
     return data[index, ...], label[index, ...]
 
 
-def prepare_pretrain_dataset(data, labels, training_rate, seed=None):
+def prepare_pretrain_dataset(data, labels, training_rate, seed=None,
+                             split="random", group_label_index=1,
+                             fold_id=0, n_folds=5, split_seed=3431):
     set_seeds(seed)
-    data_train, label_train, data_vali, label_vali, data_test, label_test = partition_and_reshape(data, labels, label_index=0
-                                                                                                  , training_rate=training_rate, vali_rate=0.1
-                                                                                                  , change_shape=False)
+    if split == "group":
+        # grouped CV: held-out test groups are excluded so SSL never sees them.
+        data_train, label_train, data_vali, label_vali, data_test, label_test \
+            = partition_grouped_and_reshape(data, labels, label_index=0,
+                                            group_label_index=group_label_index, change_shape=False,
+                                            fold_id=fold_id, n_folds=n_folds, split_seed=split_seed)
+    else:
+        data_train, label_train, data_vali, label_vali, data_test, label_test = partition_and_reshape(data, labels, label_index=0
+                                                                                                      , training_rate=training_rate, vali_rate=0.1
+                                                                                                      , change_shape=False)
     return data_train, label_train, data_vali, label_vali
 
 
 def prepare_classifier_dataset(data, labels, label_index=0, training_rate=0.8, label_rate=1.0, change_shape=True
-                               , merge=0, merge_mode='all', seed=None, balance=False):
+                               , merge=0, merge_mode='all', seed=None, balance=False
+                               , split="random", group_label_index=1, fold_id=0, n_folds=5, split_seed=3431):
 
     set_seeds(seed)
-    data_train, label_train, data_vali, label_vali, data_test, label_test \
-        = partition_and_reshape(data, labels, label_index=label_index, training_rate=training_rate, vali_rate=0.1
-                                , change_shape=change_shape, merge=merge, merge_mode=merge_mode)
+    if split == "group":
+        data_train, label_train, data_vali, label_vali, data_test, label_test \
+            = partition_grouped_and_reshape(data, labels, label_index=label_index,
+                                            group_label_index=group_label_index, change_shape=change_shape,
+                                            merge=merge, merge_mode=merge_mode,
+                                            fold_id=fold_id, n_folds=n_folds, split_seed=split_seed)
+    else:
+        data_train, label_train, data_vali, label_vali, data_test, label_test \
+            = partition_and_reshape(data, labels, label_index=label_index, training_rate=training_rate, vali_rate=0.1
+                                    , change_shape=change_shape, merge=merge, merge_mode=merge_mode)
     set_seeds(seed)
     if balance:
         data_train_label, label_train_label, _, _ \
@@ -178,6 +195,70 @@ def partition_and_reshape(data, labels, label_index=0, training_rate=0.8, vali_r
         data_train, label_train = merge_dataset(data_train, label_train, mode=merge_mode)
         data_test, label_test = merge_dataset(data_test, label_test, mode=merge_mode)
         data_vali, label_vali = merge_dataset(data_vali, label_vali, mode=merge_mode)
+    print('Train Size: %d, Vali Size: %d, Test Size: %d' % (label_train.shape[0], label_vali.shape[0], label_test.shape[0]))
+    return data_train, label_train, data_vali, label_vali, data_test, label_test
+
+
+def grouped_fold_assignment(groups, fold_id, n_folds, split_seed):
+    """Deterministically assign unique group ids to CV folds.
+
+    The fold definition depends ONLY on (sorted unique groups, split_seed, n_folds)
+    -- NOT on the per-run model seed -- so the same fold is reproduced by pretrain
+    and downstream, and across model seeds/label_rates. Returns (train_groups,
+    vali_groups, test_groups) as python sets. test = fold[fold_id],
+    vali = fold[(fold_id + 1) % n_folds], train = the remaining folds.
+    """
+    if not (0 <= fold_id < n_folds):
+        sys.exit("fold_id %d out of range [0, %d)" % (fold_id, n_folds))
+    uniq = np.unique(groups)
+    if len(uniq) < n_folds:
+        sys.exit("n_folds=%d but only %d unique groups" % (n_folds, len(uniq)))
+    # local RNG -> does not touch the global np.random state used by the
+    # balanced label sampler (which is seeded by the model seed elsewhere).
+    rng = np.random.RandomState(split_seed)
+    uniq = uniq.copy()
+    rng.shuffle(uniq)
+    folds = np.array_split(uniq, n_folds)
+    test_groups = set(folds[fold_id].tolist())
+    vali_groups = set(folds[(fold_id + 1) % n_folds].tolist())
+    train_groups = set(uniq.tolist()) - test_groups - vali_groups
+    return train_groups, vali_groups, test_groups
+
+
+def partition_grouped_and_reshape(data, labels, label_index=0, group_label_index=1,
+                                  change_shape=True, merge=0, merge_mode='all',
+                                  fold_id=0, n_folds=5, split_seed=3431):
+    """Subject-grouped k-fold partition: no group (e.g. subject) appears in more
+    than one of train/vali/test. Drop-in shape-compatible with
+    partition_and_reshape (same 6-tuple return), but the split is grouped CV
+    instead of a random window shuffle. Grouping is read from labels[:, 0,
+    group_label_index] (group id is constant within a window)."""
+    groups = labels[:, 0, group_label_index].astype(int)
+    train_groups, vali_groups, test_groups = grouped_fold_assignment(
+        groups, fold_id, n_folds, split_seed)
+
+    train_mask = np.isin(groups, list(train_groups))
+    vali_mask = np.isin(groups, list(vali_groups))
+    test_mask = np.isin(groups, list(test_groups))
+
+    data_train, data_vali, data_test = data[train_mask], data[vali_mask], data[test_mask]
+    t = np.min(labels[:, :, label_index])
+    label_train = labels[train_mask, ..., label_index] - t
+    label_vali = labels[vali_mask, ..., label_index] - t
+    label_test = labels[test_mask, ..., label_index] - t
+    if change_shape:
+        data_train = reshape_data(data_train, merge)
+        data_vali = reshape_data(data_vali, merge)
+        data_test = reshape_data(data_test, merge)
+        label_train = reshape_label(label_train, merge)
+        label_vali = reshape_label(label_vali, merge)
+        label_test = reshape_label(label_test, merge)
+    if change_shape and merge != 0:
+        data_train, label_train = merge_dataset(data_train, label_train, mode=merge_mode)
+        data_test, label_test = merge_dataset(data_test, label_test, mode=merge_mode)
+        data_vali, label_vali = merge_dataset(data_vali, label_vali, mode=merge_mode)
+    print('Grouped CV fold %d/%d (split_seed=%d) | train groups=%s vali=%s test=%s'
+          % (fold_id, n_folds, split_seed, sorted(train_groups), sorted(vali_groups), sorted(test_groups)))
     print('Train Size: %d, Vali Size: %d, Test Size: %d' % (label_train.shape[0], label_vali.shape[0], label_test.shape[0]))
     return data_train, label_train, data_vali, label_vali, data_test, label_test
 
