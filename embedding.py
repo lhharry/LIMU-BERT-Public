@@ -27,7 +27,8 @@ def fetch_setup(args, output_embed):
         labels = labels.reshape(labels.shape[0] * merge, model_cfg.seq_len, labels.shape[2])
     pipeline = [Preprocess4Normalization(model_cfg.feature_num)]
     data_set = IMUDataset(data, labels, pipeline=pipeline)
-    data_loader = DataLoader(data_set, shuffle=False, batch_size=train_cfg.batch_size)
+    data_loader = DataLoader(data_set, shuffle=False, batch_size=train_cfg.batch_size,
+                             num_workers=train_cfg.num_workers, persistent_workers=train_cfg.num_workers > 0)
     model = LIMUBertModel4Pretrain(model_cfg, output_embed=output_embed)
     criterion = nn.MSELoss(reduction='none')
     return data, labels, data_loader, model, criterion, train_cfg

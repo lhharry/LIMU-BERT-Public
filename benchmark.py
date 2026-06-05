@@ -45,9 +45,12 @@ def classify_benchmark(args, label_index, training_rate, label_rate, balance=Tru
         data_set_train = FFTDataset(data_train, label_train, pipeline=pipeline)
         data_set_test = FFTDataset(data_test, label_test, pipeline=pipeline)
         data_set_vali = FFTDataset(data_vali, label_vali, pipeline=pipeline)
-    data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=train_cfg.batch_size)
-    data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size)
-    data_loader_vali = DataLoader(data_set_vali, shuffle=False, batch_size=train_cfg.batch_size)
+    data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=train_cfg.batch_size,
+                                   num_workers=train_cfg.num_workers, persistent_workers=train_cfg.num_workers > 0)
+    data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size,
+                                  num_workers=train_cfg.num_workers, persistent_workers=train_cfg.num_workers > 0)
+    data_loader_vali = DataLoader(data_set_vali, shuffle=False, batch_size=train_cfg.batch_size,
+                                  num_workers=train_cfg.num_workers, persistent_workers=train_cfg.num_workers > 0)
 
     device = get_device(args.gpu)
     criterion = make_criterion(label_train, label_num, device)

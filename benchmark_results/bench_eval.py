@@ -65,6 +65,9 @@ def main():
                    help="Fixed seed defining the fold partition; independent of model seed.")
     p.add_argument("--n_epochs", type=int, default=None,
                    help="Override n_epochs from the base train config (e.g. fast smoke tests).")
+    p.add_argument("--num_workers", type=int, default=0,
+                   help="DataLoader worker processes for the downstream training loaders "
+                        "(injected into the temp train config; 0 = main process).")
     args_local = p.parse_args()
 
     os.chdir(REPO_ROOT)
@@ -73,6 +76,7 @@ def main():
     with open(base_cfg, "r") as f:
         cfg = json.load(f)
     cfg["seed"] = args_local.seed
+    cfg["num_workers"] = args_local.num_workers
     if args_local.n_epochs is not None:
         cfg["n_epochs"] = args_local.n_epochs
     tmp_dir = os.path.join(REPO_ROOT, "config")

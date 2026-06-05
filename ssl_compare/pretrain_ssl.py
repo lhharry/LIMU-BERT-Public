@@ -85,6 +85,9 @@ def parse_args():
     p.add_argument("--batch_size", type=int, default=None,
                    help="Override config batch size. Bigger = fewer iters/epoch = faster wall-clock "
                         "(this tiny model fits large batches). Consider raising --lr with it.")
+    p.add_argument("--num_workers", type=int, default=0,
+                   help="DataLoader worker processes (0 = main process). Safe >0 on Linux: "
+                        "LIBERTDataset4Pretrain and its pipeline transforms are picklable.")
     p.add_argument("--augment", type=int, default=1,
                    help="1 = rotation+noise augmentation on the train pipeline (held constant "
                         "across modes for a fair comparison); 0 = clean.")
@@ -148,7 +151,8 @@ def build_io(args):
 def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
     # TrainConfig is a NamedTuple -> _replace gives an overridden copy.
     bs = args.batch_size if args.batch_size else base_train_cfg.batch_size
-    train_cfg = base_train_cfg._replace(seed=seed, lr=args.lr, n_epochs=args.epochs, batch_size=bs)
+    train_cfg = base_train_cfg._replace(seed=seed, lr=args.lr, n_epochs=args.epochs, batch_size=bs,
+                                        num_workers=args.num_workers)
 
     if args.split == "group":
         out_stem = os.path.join(save_dir, "%s_fold%d_seed%d" % (args.out_name, args.fold_id, seed))
@@ -209,9 +213,13 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
     pipeline_test = [norm, mask]  # recon loss is only a monitor -> keep it clean
 
     loader_train = DataLoader(LIBERTDataset4Pretrain(data_train, pipeline=pipeline_train),
-                              shuffle=True, batch_size=train_cfg.batch_size)
+                              shuffle=True, batch_size=train_cfg.batch_size,
+                              num_workers=train_cfg.num_workers,
+                              persistent_workers=train_cfg.num_workers > 0)
     loader_vali = DataLoader(LIBERTDataset4Pretrain(data_vali, pipeline=pipeline_test),
-                             shuffle=False, batch_size=train_cfg.batch_size)
+                             shuffle=False, batch_size=train_cfg.batch_size,
+                             num_workers=train_cfg.num_workers,
+                             persistent_workers=train_cfg.num_workers > 0)
 
     model = LIMUBertModel4Pretrain(args.model_cfg)
     criterion = nn.MSELoss(reduction="none")
