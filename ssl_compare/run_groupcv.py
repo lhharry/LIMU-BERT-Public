@@ -134,6 +134,7 @@ def stream_subprocess(cmd, log_path, dry):
         for line in proc.stdout:
             sys.stdout.write(line)
             logf.write(line)
+            logf.flush()  # per-line durability: live `tail -f` + survives -9 kill
         ret = proc.wait()
         logf.write("\n%s\nreturncode: %d\nend: %s\n"
                    % ("-" * 64, ret, dt.datetime.now().isoformat()))
