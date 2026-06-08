@@ -130,6 +130,9 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
     print("\n=== DAPT seed=%d | train=%d vali=%d | start=%s | lr=%g epochs=%d ==="
           % (seed, data_train.shape[0], data_vali.shape[0], args.pretrain_model,
              train_cfg.lr, train_cfg.n_epochs))
+    print("    mask_cfg(%s): ratio=%g alpha=%g max_gram=%g prob=%g replace=%g"
+          % (args.mask_cfg, mask_cfg.mask_ratio, mask_cfg.mask_alpha,
+             mask_cfg.max_gram, mask_cfg.mask_prob, mask_cfg.replace_prob))
     # model_file = the (stripped) starting ckpt; Trainer.load re-appends '.pt'.
     trainer.pretrain(func_loss, func_forward, func_evaluate, loader_train, loader_vali,
                      model_file=args.pretrain_model)

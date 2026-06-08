@@ -242,6 +242,9 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
           % (args.mode, seed, data_train.shape[0], data_vali.shape[0],
              args.pretrain_model if args.use_init else "RANDOM",
              train_cfg.lr, train_cfg.n_epochs, int(bool(args.augment))))
+    print("    mask_cfg(%s): ratio=%g alpha=%g max_gram=%g prob=%g replace=%g"
+          % (args.mask_cfg, mask_cfg.mask_ratio, mask_cfg.mask_alpha,
+             mask_cfg.max_gram, mask_cfg.mask_prob, mask_cfg.replace_prob))
     # model_file = the (stripped) starting ckpt for warmstart/dapt; None for scratch.
     trainer.pretrain(func_loss, func_forward, func_evaluate, loader_train, loader_vali,
                      model_file=args.pretrain_model)

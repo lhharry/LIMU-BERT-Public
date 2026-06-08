@@ -97,6 +97,10 @@ def freeze_pretrain_layers(model, freeze_embed=False, freeze_layers=0):
 def main(args, training_rate=0.8):
     data, labels, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
 
+    print("mask_cfg(%s): ratio=%g alpha=%g max_gram=%g prob=%g replace=%g"
+          % (args.mask_cfg, mask_cfg.mask_ratio, mask_cfg.mask_alpha,
+             mask_cfg.max_gram, mask_cfg.mask_prob, mask_cfg.replace_prob))
+
     pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     data_train, label_train, data_test, label_test = prepare_pretrain_dataset(data, labels, training_rate,
                                                                                seed=train_cfg.seed)
