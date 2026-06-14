@@ -1,0 +1,277 @@
+﻿穿戴式 IMU 传感器人体活动识别中的域偏移应对策略：基于自监督学习的系统性深度文献调研
+摘要
+本报告针对穿戴式惯性测量单元（IMU）下肢活动识别中跨域自监督学习面临的负迁移痛点进行系统性深度调研。研究表明，异构数据集间传感器朝向、受试者步态力学及标签分布的多维偏移，是导致跨域大模型微调效果不及同域监督基线的主要诱因。为此，本报告提出采用 Mahony 算法统一几何坐标系、实施多数据集 DoReMi 混合配比优化，以及推进轻量域自适应预训练（DAPT），并在 Subject-Grouped 交叉验证下，构建抗过拟合的高效低标注迁移流水线。
+域偏移的分类与诊断方法
+在基于穿戴式传感器的活动识别（HAR）研究中，模型通常面临严重的非独立同分布（Non-IID）问题，其根源在于多维度的物理与生物力学异质性 1。对于下肢活动识别及外骨骼交互场景，这种域偏移（Domain Shift）往往呈现出更为复杂的动力学和统计学规律 2。
+在生物和物理层面上，域偏移主要源自四个维度。首先是受试者差异（Subject Shift），不同个体的身高、体重、骨骼长度及步态模式（如步频、步幅及关节力矩动态）存在天然变异，这在使用外骨骼或有下肢运动障碍的患者中尤为显著 2。其次是传感器位置与朝向偏移（Sensor Placement and Orientation Shift），即使在相同的标准协议下，传感器在人体或外骨骼上的佩戴也存在物理层面的微小偏差，而 IMU 数据极其敏感于局部坐标系的旋转 1。再次是硬件设备与采样率异质性（Device and Sampling Rate Shift），异构数据集（如 Camargo、Molinaro、Scherpereel）采用不同厂商的传感器，其量程、灵敏度、噪声分布各异，且采样率的不一致会改变时序信号的频率分辨率 5。最后是活动协议与标签分布偏移（Activity Protocol and Label Shift），各数据集对动作（如 rampascent 或 stairascent）的坡度、高度定义不尽相同，且各动作的样本占比存在剧烈差异，形成严重的类失衡 3。
+从迁移学习的统计学视角，这些异质性可以被形式化分类为三种底层的数学偏移。特征偏移（Covariate Shift）表现为边缘特征分布发生变化（  ）而条件标签分布保持稳定（  ），通常由硬件规格或传感器偏角引起 1。标签偏移（Label Shift）是指类先验概率发生变化（  ）而条件特征分布相同（  ），这在多源数据集混合中极为常见 7。条件偏移（Conditional Shift）则是最棘手的一种，即使两域标签概率一致，其条件特征分布也发生了根本性改变（  ），例如在外骨骼主动辅助状态下的行走，其下肢肌肉电信号与关节运动轨迹（  ）与无外骨骼或正常行走（  ）相比，展现出完全不同的力学特征与时序动力学 2。
+为了明确特定的迁移模型在面临异域数据时的主要瓶颈，研究人员引入了多种定量诊断指标与高维可视化方法，如下表所示。
+
+
+诊断维度
+	针对的偏移类型
+	数学计算/评估方法
+	物理或工程学含义
+	优化反馈机制
+	最大均值差异 (MMD)
+	特征偏移 (Covariate Shift)
+	  
+
+	评估两数据集提取特征在再生核希尔伯特空间中的均值距离
+	指导对抗域适应或特征对齐损失的正则化强度
+	Wasserstein 距离
+	特征/时序动态偏移
+	最优传输方案求解 (Earth Mover's Distance) 10
+	衡量时序信号分布之间的几何形态重合度与漂移量 10
+	调整对抗域适应判别器中的梯度惩罚权重
+	JS 散度 (JSD)
+	标签分布偏移 (Label Shift)
+	  
+，其中    为类分布向量
+	量化不同数据集间各类动作（如走、爬楼梯等）出现频次的变异度
+	指导损失函数重加权或 DoReMi 数据配比权重 1
+	t-SNE / UMAP 投影
+	条件偏移与聚类状态
+	高维表征映射至二维空间的可视化分析 11
+	观察相同动作标签在异域特征空间中是否能跨越数据集边界对齐 11
+	诊断骨干网络是否发生域混淆或表征坍塌
+	方法全景对比
+针对穿戴式传感器面临的域偏移，研究界发展出了多种应对策略，其适用范围、计算开销以及增益表现各异。
+
+
+方法族
+	适用偏移类型
+	所需数据与标注
+	计算成本
+	代表工作
+	典型增益与适用边界条件
+	无监督域适应 (UDA)
+	特征偏移、轻度标签偏移
+	源域全标注 + 目标域无标注数据
+	中等，需要源/目标域联合进行对抗或分布对齐训练
+	DWLR 7, DANN
+	典型增益：目标域精度提升 5%~10% 8。
+
+
+失效条件：当存在极度严重的条件/概念偏移时，强行对齐会导致语义特征被抹杀，诱发负迁移。
+	测试时自适应 (TTA)
+	动态特征偏移、受试者个体漂移
+	仅目标域无标注时序流数据
+	极低，通常仅在推理期更新 BatchNorm 或 Adapter 层
+	CoTTA, Tent
+	典型增益：对部署后新受试者的步态波动有 3%~8% 的校准效果。
+
+
+失效条件：在低标注或高噪流数据下，长期自更新极易导致模型参数漂移和崩溃。
+	域泛化 (DG)
+	特征偏移、轻度条件偏移
+	多个源域的全部标注数据（不接触目标域）
+	高，需要在多源域间联合挖掘不变特征
+	DANN, Mixup
+	典型增益：对未知新受试者或新设备的直接泛化性能提升 4%~8% 13。
+
+
+失效条件：当目标域物理场景或传感器位置产生截然不同的动态力学特性时，泛化界限失效。
+	自监督预训练 (SSL) + 微调
+	广义协变量偏移、特征表征不足
+	规模化无标注数据（可跨域或同域）
+	极高（预训练阶段）+ 低（微调阶段）
+	LIMU-BERT 12, CrossHAR 13
+	典型增益：在极低标注率（1%~5%）下，分类精度和 F1 分数相比从头训练提升 10% 以上 12。
+
+
+失效条件：若预训练数据与目标域物理语义完全脱节，微调无法纠正底层表征扭曲。
+	空间几何/坐标系对齐
+	传感器安装位置与旋转引起的特征偏移
+	无需标注，仅依赖 6 轴 IMU 原始物理物理量 1
+	极低，仅需在预处理阶段进行三维空间矩阵变换
+	Mahony 融合算法 1, Madgwick
+	典型增益：统一异构数据集的重力与运动方向参考，跨数据集任务平均提升约 6.51% 精度 1。
+
+
+失效条件：高度依赖 IMU 零偏校准，在剧烈无规则碰撞或磁干扰严重环境下可能解算漂移。
+	数据混合配比优化
+	异构源域特征偏移与样本量失衡
+	多个无标注预训练数据集
+	中等，需在预训练中基于梯度/损失反馈进行动态配比评估
+	DoReMi 1, HAR-DoReMi 6, Group DRO 1
+	典型增益：动态调整不同数据集比重，仅需 30%~50% 的数据量即可达到相同甚至更好的泛化性能 1。
+
+
+失效条件：需要合理的参考域（Reference Domain）作为损失导向，否则权重优化可能失去焦点。
+	标签偏移重加权
+	标签分布偏移 (Label Shift)
+	目标域无标注（用于类先验估计）+ 源域标注
+	极低，仅在损失计算或分类概率阶段进行乘性修正
+	DWLR 7
+	典型增益：在动作比例极度失衡（如站立极多、爬坡极少）时，大幅提升少类动作的召回率 7。
+
+
+失效条件：若初始分类器的伪标签估计极其不准，权重修正会因噪信号积累而失效。
+	跨域预训练与同域基线悖论的专门分析
+在穿戴式传感器人体活动识别研究中，研究人员经常会遇到一个棘手的技术痛点，即在海量异域无标注数据集上进行通用预训练的基础模型，在迁移至特定窄域（如下肢外骨骼步态分析）时，其微调（Fine-tuning）性能往往只能勉强持平于从头开始训练的同域监督基线（R-GRU），而在冻结骨干仅微调分类头（Linear Probe）的设置下，其表现甚至系统性劣于同域监督基线 5。这种大规模跨域预训练在 HAR 任务上频繁遭遇“负迁移”的现象，与图像或文本大模型的表现截然相反。
+该现象的底层物理和信息论机制可以从三个方面进行解剖。首先是物理语义与信号频率特征的根本背离。目前用于构建时序基础模型的开源大数据集（如 HHAR, UCI, MotionSense, Shoaib）绝大多数是由智能手机或智能手表采集的 5。这些设备通常放置在口袋、腰部或手腕上，捕获的是全身重心在低频段的位移以及无序的上肢摆动 5。而下肢外骨骼场景（如 Camargo, Molinaro, Scherpereel）采用的是直接绑定于大腿、小腿、或足部的刚性 IMU，捕获的是极高频、高刚性、并严格受人体关节动力学约束的周期性步态相位特征 2。这种“手持/腕部日常活动”与“下肢/外骨骼刚性动力学”之间的物理语义鸿沟极其巨大，使得在异域日常活动上学到的基础表征不仅无法提供有效的先验，反而会将冗余、不相关的摆动特征作为噪声引入 2。
+其次是强行实施“域不变表征”对关键信息的抹杀。许多跨域 SSL 模型（如 TF-C 或 TS-TCC）在预训练时，试图通过时间-频率一致性或对抗损失强制拉近不同设备、不同个体之间的特征分布 6。但在多受试者或异构设备 HAR 中，个体的步态生物力学变异、环境和频段特异性实际上与下游活动识别所需的细分动作特征相互纠缠叠加 17。强制压制这些域特异特征，会不可避免地擦除用于区分微小动作（如 rampascent 的坡度与 stairascent 的阶梯高度）的高频刚性物理辨识信号，导致特征空间的判别能力发生不可逆的退化，即引发了典型的负迁移 16。此外，掩码重构型自监督模型（如 LIMU-BERT）在连续时序信号上极易陷入重构的“平凡解”（Trivial Solutions）陷阱，即网络通过简单的线性插值或平滑滤波器机制便可实现极低的重构损失，而没有真正学到跨通道物理关联与步态周期的高级语义 12。
+在面对上述挑战时，同域/近域自监督预训练成为了连接异域基础模型与目标域应用的重要桥梁。针对该设置，三种主流迁移策略的表现存在显著差异：
+* 从零自监督（Scratch-SSL）：将相关且高质的 4 个下肢数据集（Camargo、Molinaro、Scherpereel、Scherpereel-exo）直接合并从头训练自监督模型。其能够保证表征空间的纯净性，完全贴合下肢力学模式 2，但其性能往往受制于领域数据集的整体规模，在下游低标注率微调时容易由于过拟合而退化。
+* 热启动后全量重学（Warmstart）：加载跨域基础模型权重，以常规学习率在同域合并池上进行全参数二次预训练。这一过程往往会引发 Transformer 层发生严重的“灾难性遗忘”（Catastrophic Forgetting）18，大梯度的更新会迅速扰乱基础模型中已确立的长距离时序依赖和泛化平滑特征，使其表现最终退化到与 Scratch 相当的水平。
+* 轻量域自适应预训练（DAPT）：加载基础模型权重后，使用极小的学习率（通常较常规低 1~2 个数量级，如   ）在下肢数据集拼接池上进行持续自监督预训练。大量经验证据表明，DAPT 能够完美充当“特征缓冲带”，既完整继承了基础模型在超大规模数据上积累的长距离时间上下文感知力，又以极其温和的方式拉近了异域信号与下肢刚体信号在局部特征层面的统计距离。在 label_rate = 1%/2%/5% 的极低标注评测中，DAPT 微调模型表现最为稳定，其线性探针的表现通常能取得对 Scratch 与 Warmstart 压倒性的优势 1。
+预训练设计要素的证据综述
+构建一个专门针对多源下肢 IMU 数据集的联合自监督预训练模型，其细节设计对最终跨数据集迁移性能起着决定性的影响。
+在掩码机制方面，传统 LIMU-BERT 继承了自然语言处理中 15% 的掩码率设计 12。然而，IMU 传感器时序信号具有高频采样率和高度的时间连续性，在窗口大小仅约 20 帧的下肢步态场景中，15% 的随机点掩码会使任务变得过于简单，模型只需直接复制相邻帧的数值即可完成重构 5。文献中已达成广泛一致的结论，即必须将掩码率大幅提升至 40% 到 60% 20。同时，必须采用分块掩码（Block-wise/Segment Masking）替代单点随机掩码，每次随机遮蔽长度为 4~6 帧的连续片段 20。这样能够有效阻断模型通过线性插值寻找平凡解的路径，强迫网络利用物理多通道（加速度与陀螺仪）之间的动力学耦合关系和长距离周期特征来猜测缺失片段，显著提高了高维特征的语义判别性 1。
+在数据增强与归一化层面，不同 SSL 范式之间存在着明确的边界与分歧。对于时频一致性等对比学习算法，通道旋转、高斯噪声、缩放以及频段擦除是构造异质正负样本对的绝对基石 6。然而，对于 LIMU-BERT 这种基于掩码重构的模型，预训练期间施加破坏物理法则的强增强（如随机旋转、乱序）会导致三轴加速度与陀螺仪之间的空间几何关系被强行割裂，使 MSE 损失极难收敛 1。此外，关于归一化方式的选取，文献中存在两种对立的主张：一种是主张对异构数据集进行跨数据集全局统计对齐，这能保留不同动作类型的绝对物理能量（如 jog 与 walk 的绝对振幅差异明显），但缺点是无法校准异构传感器硬件固有的增益与量程系统误差 5；另一种是样本内归一化（Per-sample Normalization），它能完美抹除硬件规格差异，但会将所有动作映射到相同的局部幅值范围，导致分类器在低标注下难以区分慢速行走与快速奔跑。因此，目前公认的最佳实践是采用通道级实例归一化，并结合特征层尺度的通道残差注入。
+几何空间与数据混合配比的优化是提升跨数据集泛化性能的关键手段。由于 Camargo, Molinaro, Scherpereel 等数据集的传感器安装偏角各异，导致 IMU 局部坐标系下的信号产生严重扭曲 1。通过集成 Mahony 姿态融合算法，在预处理阶段将局部 3 轴加速度与 3 轴陀螺仪解算并投影至统一的地球重力全局参考坐标系（Global Frame of Gravity），可使跨数据集下游识别精度平均提升 6.51% 1。同时，由于拼接的 4 个数据集样本量分布极不均衡，采用类似于大语言模型 DoReMi 思想的数据混合配比优化（基于各子数据集当前的掩码重构 Loss 动态调整采样概率，如通过 Group DRO 机制增加难适应或外骨骼特异域 Scherpereel-exo 的采样权重），能逼迫模型避免偏向于大样本数据集，仅需 30% 至 50% 的数据量便可达到全量拼接预训练相同的迁移效果 1。
+以下整理了文献中关于上述设计要素的一致性结论与分歧点。
+
+
+设计要素
+	文献一致性结论 (Consensus)
+	文献分歧点/尚未解决的问题 (Divergence & Gaps)
+	掩码率与掩码策略
+	- 必须使用高掩码率 (40%~60%) 20
+
+
+- 必须采用连续块掩码 (Block-wise) 替代单点随机掩码
+	掩码策略（如时序掩码 vs. 通道掩码）在不同下游任务（如 HAR vs. 设备位置分类）中的动态适配性尚未有统一结论 12。
+	数据增强 (Augmentation)
+	- 对比学习极度依赖通道旋转与时空扰动 6
+
+
+- 重建学习 (LIMU-BERT) 中强空间旋转在预训练期会导致重构任务难以收敛 1
+	如何在线动态调整增强强度（如自适应增强课程学习）以平衡对比语义与重构精度，目前仍缺乏系统性研究 18。
+	归一化 (Normalization)
+	- 必须消除硬件引起的量程与偏置系统误差 15
+
+
+- 样本内归一化 (Per-sample) 会丢失绝对运动强度特征
+	在极端低标注下，如何在归一化过程中无损保留跨动作类型的宏观物理强度（如 jog 与 walk 的绝对能耗差异）仍无完美方案。
+	坐标系对齐 (Coordinate Alignment)
+	- 引入 Mahony 等姿态解算对齐可消除物理传感器偏角 1
+
+
+- 统一几何空间特征对跨域泛化有确定性增益 (约 6.51% 提升) 1
+	姿态融合解算对陀螺仪积分漂移和磁强计干扰极其敏感 6，如何在剧烈动态外骨骼场景下保持长时间高精度的空间对齐。
+	数据配比优化 (Data Mixture)
+	- 基于 DoReMi 或 Group DRO 动态损失反馈比直接数据拼接更加高效 1
+
+
+- 优化数据配比可减少达 50% 以上的计算开销 1
+	优化配比依赖于“参考域 (Reference Domain)”的选取。若目标场景多变，如何无监督地定义最优参考域仍是一个未决问题。
+	低标注与受试者分组评测的陷阱与最佳实践
+在 label_rate = 1%/2%/5% 的极低标注评测中，由于样本极端匮乏，极易在算法评估阶段引发严重的“指标虚高”和信息泄漏，导致预训练模型的真实泛化能力被严重高估。
+最普遍的评测陷阱是滑动窗口引发的信息泄漏（Information Leakage）。在 IMU 序列处理中，通常会使用重叠滑窗（如 20 帧窗口，10 帧步长）来切分数据 5。如果下游分类器采用传统的随机 K 折交叉验证（Random Split）或随机划分训练/测试集，就会导致来自同一受试者、在同一周期动作（Trial）内的相邻滑窗被同时分配到训练集和测试集中。这本质上是在进行高维信号插值，模型只需背诵特定受试者的个性化波形即可在测试集上取得极高的精度，这种方法评估出的“基线性能”极其虚高，在面临新受试者时通常会发生断崖式跌落。
+为了确保评估的严谨性，研究人员必须严格执行按受试者分组的交叉验证（Subject-Grouped Cross-Validation） 13。在该协议下，训练集和测试集之间的受试者 ID 边界必须被严格隔绝（如 Leave-One-Subject-Out 或 Group K-Fold）2，测试集的受试者数据在微调和测试阶段绝对不参与模型训练。只有在这种评估协议下取得的分类增益，才代表了模型对未知个体步态的真实外推和泛化能力。
+此外，在极度稀缺的标注资源下，直接微调 Transformer（LIMU-BERT）骨干网络的数百万参数，会使其特征映射空间在几次迭代后迅速过拟合到少数训练受试者的特定动作特征上，从而诱发表征坍塌 15。因此，在 label_rate = 1%/2%/5% 时，最佳评估实践应当优先采用冻结探针（Linear Probe）——冻结 LIMU-BERT 的全部底层参数，仅仅训练下游的 GRU 分类头 12。若在此严苛约束下 DAPT 的表现超越 R-GRU，则可证明自监督预训练赋予了骨干网络本质的步态周相提取能力 12。在提升微调精度时，可进而采用参数高效微调（PEFT，如 LoRA）仅微调 1% 左右的旁路参数，防止模型参数空间发生扭曲 21。
+面向特定下肢与外骨骼场景的优先级行动清单
+针对由四个异构下肢/外骨骼数据集（Camargo, Molinaro, Scherpereel, Scherpereel-exo）组成的联合预训练池，以及 LIMU-BERT（骨干）+ GRU（分类头）的微调任务，以下提供一套有学术证据支撑、高可执行性的实验路线清单。
+
+
+阶段与优先级
+	核心可执行行动 (Actionable Steps)
+	预期物理/模型收益 (Expected Gains)
+	失败/劣化信号 (Fail Signals)
+	调试与修正机制 (Remedies)
+	阶段 1：几何空间对齐
+
+
+(优先级：极高)
+	- 对 Camargo、Molinaro、Scherpereel、Scherpereel-exo 原始 6 通道 IMU 实施 Mahony 姿态解算 1。
+
+
+- 将传感器局部坐标对齐到统一的重力全局坐标系，提取    作为输入 1。
+	- 消除因传感器倾角、佩戴偏移引起的空间旋转偏移 4。
+
+
+- 预计跨数据集迁移精度提升 5.5%~7.5% 1。
+	- 转换后的角速度或加速度在静止状态下不为零，出现剧烈数值漂移。
+	- 校准 IMU 静态零偏。
+
+
+- 调整 Mahony 滤波增益   ，减弱积分漂移效应 6。
+	阶段 2：数据配比与 DAPT 部署
+
+
+(优先级：高)
+	- 采用在异域大尺度数据上预训练的基础 LIMU-BERT 进行热启动 5。
+
+
+- 在合并的下肢预训练池上以极低学习率 (  ) 进行轻量域自适应预训练 (DAPT)。
+
+
+- 根据各域重构 Loss，使用 DoReMi / Group DRO 思想动态调整采样配比 1。
+	- 保留基础模型的长距离时序关联建模能力。
+
+
+- 解决 Scherpereel-exo 与 Camargo 数据量严重失衡的问题 1。
+	- DAPT 预训练过程中，在目标域上的 Linear Probe 表现差于从头自监督 (Scratch)。
+	- 发生灾难性遗忘。
+
+
+- 进一步将学习率降低至   。
+
+
+- 冻结 Transformer 浅层，仅对深层进行 DAPT 持续学习。
+	阶段 3：掩码与增强超参调优
+
+
+(优先级：中)
+	- 将 mask_ratio 提升至 40% ~ 50% 20。
+
+
+- 更改掩码策略为连续 4~6 帧分块掩码 (Block-wise) 20。
+
+
+- 在预训练阶段关闭随机通道旋转，仅保留微弱的时序噪声与缩放。
+	- 阻断相邻帧插值的“平凡解”路径 12。
+
+
+- 逼迫模型建立下肢刚体运动学的全局周相语义，Linear Probe 性能提升 5% 以上。
+	- DAPT 的重构 MSE Loss 居高不下，无法收敛。
+	- 缩短连续掩码块的长度至 3 帧。
+
+
+- 稍微降低整体掩码率至 35%，维持任务难度与可收敛性的平衡。
+	阶段 4：低标注评测与标签偏移校准
+
+
+(优先级：中)
+	- 严格执行 Subject-Grouped 交叉验证，禁止随机切分 13。
+
+
+- 在 1%/2%/5% 标签率下，采用 Linear Probe 或 LoRA 替换全参数微调 21。
+
+
+- 引入 DWLR 的时频双域可学习重加权机制，校准类先验分布 7。
+	- 杜绝数据泄漏导致的性能虚高 1。
+
+
+- 在极度缺乏标签的场景下，通过 DWLR 稳健提升小类动作（如 rampascent）的召回率 7。
+	- 引入重加权后，由于伪标签置信度太低，导致损失函数计算发散或分类效果恶化。
+	- 限制 DWLR 的可学习权重范围（做 Clip 操作）。
+
+
+- 先冻结骨干单独训练 GRU 分类头，待分类概率稳定后再开启重加权。
+	参考文献
+1.(https://github.com/zhoupf/LIMU-BERT-Public) 11 2. Huatao Xu, Pengfei Zhou, Rui Tan, Mo Li, Guobin Shen. "LIMU-BERT: Unleashing the Potential of Unlabeled Data for IMU Sensing Applications", ACM Conference on Embedded Networked Sensor Systems (SenSys), 2021.(https://tanrui.github.io/pub/LIMU_BERT.pdf) 12 3. LIMU-BERT-X commercial model release, ACM MobiCom 2025.(https://github.com/dapowan/LIMU-BERT-Public) 5 4. Lulu Ban, Tao Zhu, Xiangqing Lu, Qi Qiu, Wenyong Han, Shuangjian Li, Liming Chen, Kevin I-Kai Wang, Mingxing Nie, Yaping Wan. "HAR-DoReMi: Optimizing Data Mixture for Self-Supervised Human Activity Recognition Across Heterogeneous IMU Datasets", Neurocomputing, 2026.(https://arxiv.org/abs/2503.13542) 14 5. Zhiqing Hong, et al. "CrossHAR: Generalizing Cross-dataset Human Activity Recognition via Hierarchical Self-Supervised Pretraining", Proceedings of the ACM on Interactive, Mobile, Wearable and Ubiquitous Technologies (IMWUT/UbiComp), 2024.(https://www.semanticscholar.org/paper/CrossHAR%3A-Generalizing-Cross-dataset-Human-Activity-Hong-Li/9c977c86331070fbfa20da1494ac6e0c6360026f) 13 6. Juren Li, Yang Yang, Youmin Chen, Jianfeng Zhang, Zeyu Lai, Lujia Pan. "DWLR: Domain Adaptation under Label Shift for Wearable Sensor", Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence (IJCAI), 2024.(https://www.ijcai.org/proceedings/2024/0489.pdf) 7 7. Molinaro, Inseung Kang, Jonathan Camargo, Aaron J. Young. "Estimating biological joint moments using wearable sensors during multimodal locomotion", Science Robotics, 2024.(https://par.nsf.gov/servlets/purl/10510245) 2 8. Scherpereel, Ethan B. Schonhaut, Aaron J. Young. "Ankle Exoskeleton Control via Data-Driven Gait Estimation for Walking, Running, and Inclines", ResearchGate, 2024.(https://www.researchgate.net/publication/390866104_Ankle_Exoskeleton_Control_via_Data-Driven_Gait_Estimation_for_Walking_Running_and_Inclines) 2
+Works cited
+   1. HAR-DoReMi: Optimizing Data Mixture for Self-Supervised Human Activity Recognition Across Heterogeneous IMU Datasets - arXiv, accessed June 8, 2026, https://arxiv.org/html/2503.13542v1
+   2. Ankle Exoskeleton Control via Data-Driven Gait Estimation for Walking, Running, and Inclines | Request PDF - ResearchGate, accessed June 8, 2026, https://www.researchgate.net/publication/390866104_Ankle_Exoskeleton_Control_via_Data-Driven_Gait_Estimation_for_Walking_Running_and_Inclines
+   3. Estimating human joint moments unifies exoskeleton control, reducing user effort - NSF Public Access Repository, accessed June 8, 2026, https://par.nsf.gov/servlets/purl/10510245
+   4. Mingxing Nie's research works | University of South China and other places - ResearchGate, accessed June 8, 2026, https://www.researchgate.net/scientific-contributions/Mingxing-Nie-2221187248
+   5. dapowan/LIMU-BERT-Public: A lite BERT-like representation model for IMU sensor data - GitHub, accessed June 8, 2026, https://github.com/dapowan/LIMU-BERT-Public
+   6. HAR-DoReMi: Optimizing Data Mixture for Self-Supervised Human Activity Recognition Across Heterogeneous IMU Datasets | Request PDF - ResearchGate, accessed June 8, 2026, https://www.researchgate.net/publication/389946831_HAR-DoReMi_Optimizing_Data_Mixture_for_Self-Supervised_Human_Activity_Recognition_Across_Heterogeneous_IMU_Datasets
+   7. DWLR: Domain Adaptation under Label Shift for Wearable ... - IJCAI, accessed June 8, 2026, https://www.ijcai.org/proceedings/2024/0489.pdf
+   8. DWLR: Domain Adaptation under Label Shift for Wearable Sensor - IJCAI, accessed June 8, 2026, https://www.ijcai.org/proceedings/2024/489
+   9. Main Text - bioRxiv version, accessed June 8, 2026, https://www.biorxiv.org/content/10.64898/2026.04.01.715109.full.pdf
+   10. Performance of the compared algorithms for three different, accessed June 8, 2026, https://www.researchgate.net/figure/Performance-of-the-compared-algorithms-for-three-different-covariance-matrices-of-the_fig2_355867879
+   11. zhoupf/LIMU-BERT-Public: A lite BERT-like representation learning model for IMU data, accessed June 8, 2026, https://github.com/zhoupf/LIMU-BERT-Public
+   12. LIMU-BERT: Unleashing the Potential of Unlabeled Data for IMU Sensing Applications - GitHub Pages, accessed June 8, 2026, https://tanrui.github.io/pub/LIMU_BERT.pdf
+   13. CrossHAR: Generalizing Cross-dataset Human Activity Recognition via Hierarchical Self-Supervised Pretraining | Semantic Scholar, accessed June 8, 2026, https://www.semanticscholar.org/paper/CrossHAR%3A-Generalizing-Cross-dataset-Human-Activity-Hong-Li/9c977c86331070fbfa20da1494ac6e0c6360026f
+   14. [2503.13542] HAR-DoReMi: Optimizing Data Mixture for Self-Supervised Human Activity Recognition Across Heterogeneous IMU Datasets - arXiv, accessed June 8, 2026, https://arxiv.org/abs/2503.13542
+   15. LIMU-BERT: - Huatao Xu, accessed June 8, 2026, https://dapowan.github.io/files/LIMU-BERT_GetMobile.pdf
+   16. A Survey on Time-Series Pre-Trained Models - IEEE Computer Society, accessed June 8, 2026, https://www.computer.org/csdl/journal/tk/2024/12/10706809/20QThKlh0SA
+   17. MU-SHOT-Fi: Self-Supervised Multi-User Wi-Fi Sensing with Source-free Unsupervised Domain Adaptation - arXiv, accessed June 8, 2026, https://arxiv.org/html/2605.01369v1
+   18. Self-Supervised Learning: How AI Learns Without Labeled Data - ATC, accessed June 8, 2026, https://blog.american-technology.net/self-supervised-learning-how-ai-learns-without-labeled-data/
+   19. Data-Driven Cross-Lingual Anomaly Detection via Self-Supervised Representation Learning, accessed June 8, 2026, https://www.mdpi.com/2079-9292/15/1/212
+   20. zhaxidele/Foundation-Models-Defining-A-New-Era-In-Human-Activity-Recognition - GitHub, accessed June 8, 2026, https://github.com/zhaxidele/Foundation-Models-Defining-A-New-Era-In-Human-Activity-Recognition
+   21. Towards User-Generalizable Wearable-Sensor-Based Human Activity Recognition: A Multi-Task Contrastive Learning Approach - MDPI, accessed June 8, 2026, https://www.mdpi.com/1424-8220/25/22/6988

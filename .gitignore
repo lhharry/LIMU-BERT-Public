@@ -15,6 +15,7 @@ __pycache__/
 
 # Camargo generated arrays (too large for normal Git hosting)
 dataset/camargo/
+dataset/jetson/
 dataset/molinaro/
 dataset/scherpereel/
 dataset/scherpereel_exo/
