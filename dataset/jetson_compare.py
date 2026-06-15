@@ -66,7 +66,7 @@ G_TO_MS2 = 9.81
 RAD_TO_DEG = 57.2957795
 
 # Cap samples kept per (camargo) class to bound memory; reservoir-subsampled.
-CAMARGO_MAX_PER_CLASS = 300_000
+CAMARGO_MAX_PER_CLASS = 30000
 SEED = 3431
 
 CHANNELS = ["acc_x", "acc_y", "acc_z", "gyro_x", "gyro_y", "gyro_z",
@@ -190,7 +190,7 @@ def load_jetson_trial(folder):
     acc, gyr = acc.iloc[:n], gyr.iloc[:n]
     blocks = []
     for side in ("Left", "Right"):
-        cols = [f"{side}_x", f"{side}_y", f"{side}_z"]
+        cols = [f"{side}_y", f"{side}_x", f"{side}_z"]
         a = acc[cols].to_numpy(dtype=float)              # m/s^2 already
         g = gyr[cols].to_numpy(dtype=float) * RAD_TO_DEG  # rad/s -> deg/s
         blocks.append(np.hstack([a, g]))

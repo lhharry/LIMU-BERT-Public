@@ -14,7 +14,7 @@ from utils import Preprocess4Normalization
 
 
 DEFAULT_CSV_PATH = Path("inference/data/levelground_cw_slow_01_01_ds10hz.csv")
-DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_camargo_10_20/limu_bert_x.pt")
+DEFAULT_PRETRAIN_MODEL = Path("saved/pretrain_base_camargo_10_20/limu_gru_dapt.pt")
 DEFAULT_CLASSIFIER_MODEL = Path("saved/classifier_base_gru_camargo_10_20_dense/bertx_gru_dense_0430_v1.pt")
 
 # Single-mode debug config for direct VS Code Run/Debug.

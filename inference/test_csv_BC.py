@@ -14,12 +14,12 @@ from utils import Preprocess4Normalization
 
 
 DEFAULT_CSV_PATH = Path("inference/data/levelground_ccw_normal_01_04_ds10hz.csv")
-DEFAULT_FINETUNED_MODEL = Path("saved/bert_classifier_base_gru_camargo_10_20_dense/camargo_bertx_0428dense.pt")
+DEFAULT_FINETUNED_MODEL = Path("saved/bert_classifier_base_gru_camargo_10_20_dense_8cls/limu_gru_dapt.pt")
 
 DEBUG_CONFIG = {
     "csv_path": DEFAULT_CSV_PATH,
     "dataset": "camargo",
-    "dataset_version": "10_20_dense",
+    "dataset_version": "10_20_dense_8cls",
     "delimiter": ",",
     "sensor": "thigh",
     "feature_columns": None,
@@ -28,9 +28,9 @@ DEBUG_CONFIG = {
     "feature_count": 6,
     "batch_size": 128,
     "bert_version": "v3",            # NEW
-    "classifier_version": "v2",
+    "classifier_version": "v3",
     "finetuned_model": DEFAULT_FINETUNED_MODEL,   # replaces pretrain_model + classifier_model
-    "label_num_override": 9,         # NEW — see note below
+    "label_num_override": 8,         # NEW — see note below
     "label_path": None,
     "output": None,
 
