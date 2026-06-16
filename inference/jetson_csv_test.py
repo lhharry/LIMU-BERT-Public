@@ -57,7 +57,7 @@ CONFIG = {
     "classifier_version": "v3",
 
     "stride": None,                 # None = non-overlapping windows (= seq_len)
-    "batch_size": 128,
+    "batch_size": 16,
 }
 
 # jetson folder class token -> dense activity name (must match the model's classes)
@@ -69,8 +69,8 @@ JETSON_TOKEN_TO_DENSE = {
 }
 
 SIDE_COLS = {
-    "left": ["Left_x", "Left_y", "Left_z"],
-    "right": ["Right_x", "Right_y", "Right_z"],
+    "left": ["Left_y", "Left_x", "Left_z"],
+    "right": ["Right_y", "Right_x", "Right_z"],
 }
 
 
@@ -262,6 +262,22 @@ def print_report(results, label_names):
     print(f"\nOverall window accuracy : {all_correct / all_total:.3f} "
           f"({all_correct}/{all_total})")
     print(f"Macro (per-class) accuracy: {np.nanmean(accs):.3f}")
+
+    # per-leg accuracy over pooled scored windows
+    print("\n=== Per-leg accuracy (scored windows pooled over classes/trials) ===")
+    by_side = {}
+    for r in scored_results :
+        if r["class"] == "walk":
+            p, g = r["scored_preds"], r["gt"]
+            c, t = by_side.setdefault(r["side"], [0, 0])
+            by_side[r["side"]] = [c + int(np.sum(p == g)), t + p.size]
+        print(f"{'side':6s} {'windows':>8s} {'accuracy':>9s}")
+        print("-" * 27)
+        for side in ["left", "right", "average"]:
+            if side in by_side:
+                corr, tot = by_side[side]
+                a = corr / tot if tot else float("nan")
+                print(f"{side:6s} {tot:8d} {a:9.3f}")
 
 
 # -----------------------------------------------------------------------------

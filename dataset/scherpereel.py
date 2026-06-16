@@ -6,6 +6,12 @@
 # Output: data_<version>.npy  (N, 20, 6)  float32
 #         label_<version>.npy (N, 20, 2)  float  [activity_id, user_id]
 #
+# Activity labels are mapped to a shared 9-class dense space (see dense_label):
+#   incline_walk up/down -> ramp{ascent,descent}; stairs up/down ->
+#   stair{ascent,descent}; sit_to_stand -> sit-stand-transition; turn_and_step ->
+#   turn; normal_walk by speed (hyphen = decimal, > 1.5 m/s -> jog else walk).
+#   normal_walk shuffle/skip and any unmapped folder are dropped.
+#
 # IMPORTANT: each trial ships an <name>_activity_flag.csv with per-sample,
 # per-leg flags (columns: time,left,right). Only rows where the flag == 1 are
 # the subject actually performing the labeled activity; the rest are setup /
@@ -46,25 +52,55 @@ LEG_SPEC = {
 RAD_PER_DEG = 1.0 / 57.29578
 
 
-def get_base_activity(folder_name):
-    """'ball_toss_1_center' -> 'ball_toss'  (everything before first digit token)"""
-    parts = folder_name.split('_')
-    for i, p in enumerate(parts):
-        if p.isdigit():
-            return '_'.join(parts[:i])
-    return folder_name
+# Shared dense label space (compact ids 0..8). 'stand' has no source trial in
+# this dataset (no static-standing recording) and so stays at zero support; it is
+# kept so the label ids line up with the other dense datasets.
+DENSE_ACTIVITIES = ["stand", "walk", "turn", "jog",
+                    "rampascent", "rampdescent",
+                    "stairascent", "stairdescent", "sit-stand-transition"]
+
+WALK_JOG_SPEED_THRESHOLD = 1.5   # normal_walk speed (m/s); > threshold -> jog
 
 
-def build_label_map(root):
-    activities = set()
-    for subj in os.listdir(root):
-        subj_path = os.path.join(root, subj)
-        if not os.path.isdir(subj_path) or not subj.startswith('AB'):
-            continue
-        for folder in os.listdir(subj_path):
-            if os.path.isdir(os.path.join(subj_path, folder)):
-                activities.add(get_base_activity(folder))
-    return {act: i for i, act in enumerate(sorted(activities))}
+def reconstruct_label(folder_name):
+    """Drop pure-integer trial/step index tokens, keep the rest.
+    'incline_walk_1_down5'      -> 'incline_walk_down5'
+    'stairs_1_10_down'          -> 'stairs_down'
+    'sit_to_stand_1_2_short-arm'-> 'sit_to_stand_short-arm'
+    'normal_walk_1_0-6'         -> 'normal_walk_0-6'  ('-' is a decimal point)
+    """
+    return '_'.join(p for p in folder_name.split('_') if not p.isdigit())
+
+
+def dense_label(folder_name):
+    """Map a raw trial folder name to one of DENSE_ACTIVITIES, or None to drop."""
+    name = reconstruct_label(folder_name)
+    if name.startswith('incline_walk'):
+        if 'up' in name:   return 'rampascent'
+        if 'down' in name: return 'rampdescent'
+        return None
+    if name.startswith('normal_walk'):
+        suffix = name[len('normal_walk_'):] if name.startswith('normal_walk_') else ''
+        if suffix in ('shuffle', 'skip'):     # not normal locomotion -> drop
+            return None
+        try:
+            speed = float(suffix.replace('-', '.'))   # '0-6' -> 0.6
+        except ValueError:
+            return None
+        return 'jog' if speed > WALK_JOG_SPEED_THRESHOLD else 'walk'
+    if name.startswith('sit_to_stand'):
+        return 'sit-stand-transition'
+    if name.startswith('stairs'):
+        if 'up' in name:   return 'stairascent'
+        if 'down' in name: return 'stairdescent'
+        return None
+    if name.startswith('turn_and_step'):
+        return 'turn'
+    return None
+
+
+def build_label_map():
+    return {name: i for i, name in enumerate(DENSE_ACTIVITIES)}
 
 
 def label_user(name):
@@ -108,10 +144,10 @@ def load_sensor_data(path, label_map, seq_len, raw_sr, target_sr, leg):
             folder_path = os.path.join(subj_path, folder)
             if not os.path.isdir(folder_path):
                 continue
-            base_act = get_base_activity(folder)
-            if base_act not in label_map:
+            dense = dense_label(folder)
+            if dense is None:
                 continue
-            label_act = label_map[base_act]
+            label_act = label_map[dense]
 
             imu_files = [f for f in os.listdir(folder_path) if f.endswith('_imu_real.csv')]
             if not imu_files:
@@ -165,14 +201,17 @@ def load_sensor_data(path, label_map, seq_len, raw_sr, target_sr, leg):
 
 
 def preprocess(path, path_save, version, leg, raw_sr=RAW_SR, target_sr=TARGET_SR, seq_len=SEQ_LEN):
-    label_map = build_label_map(path)
+    label_map = build_label_map()
     print(f'Label map ({len(label_map)} classes):', label_map)
 
     data_list, label_list = load_sensor_data(path, label_map, seq_len, raw_sr, target_sr, leg)
     data  = np.concatenate(data_list,  0).astype(np.float32)
     label = np.concatenate(label_list, 0).astype(np.float32)
 
+    ids, counts = np.unique(label[:, 0, 0].astype(int), return_counts=True)
+    dist = {DENSE_ACTIVITIES[i]: int(c) for i, c in zip(ids, counts)}
     print(f'All data processed [{leg}, flag==1 only]. data={data.shape}  label={label.shape}')
+    print(f'Per-class windows: {dist}')
     os.makedirs(path_save, exist_ok=True)
     np.save(os.path.join(path_save, 'data_'  + version + '.npy'), data)
     np.save(os.path.join(path_save, 'label_' + version + '.npy'), label)

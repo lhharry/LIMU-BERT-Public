@@ -132,6 +132,22 @@
     "size": 21371
     },
 
+    "scherpereel_10_20_dense_9cls": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 9,
+        "activity_label": ["stand", "walk", "turn", "jog",
+                  "rampascent", "rampdescent",
+                  "stairascent", "stairdescent", "sit-stand-transition"],
+        "user_label_index": 1,
+        "user_label_size": 12,
+        "model_label_index": -1,
+        "model_label_size": 0,
+        "size": 1890
+    },
+
     "scherpereel_10_20": {
         "sr": 10,
         "seq_len": 20,
@@ -230,6 +246,18 @@
         "user_label_index": 1,
         "user_label_size": 25,
         "size": 24552
+    },
+
+    "real_10_20_both": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 7,
+        "activity_label": ["stand", "walk", "turn", "jog","rampascent", "stairascent", "stairdescent"],
+        "user_label_index": 1,
+        "user_label_size": 0,
+        "size": 700
     }
 
 }

@@ -13,6 +13,8 @@ is one steady-state locomotion bout; the activity is the first underscore token
 of the folder name (e.g. "LG_C0p0_S1p25_UC_1_1" -> "LG"). Transition modes
 TRA/TRB are excluded via --include_modes (default: LG RA RD SA SD ST).
 
+
+
 Usage:
     python dataset/molinaro.py                 # both default args, left leg
     python dataset/molinaro.py --leg both
@@ -42,6 +44,20 @@ LEG_COLS = {
     'right': [RIGHT_COLS],
     'both':  [LEFT_COLS, RIGHT_COLS],
 }
+
+DENSE_ACTIVITIES = ["stand", "walk", "turn", "jog",
+                    "rampascent", "rampdescent",
+                    "stairascent", "stairdescent", "sit-stand-transition"]
+
+
+def reconstruct_label(folder_name):
+    """Drop pure-integer trial/step index tokens, keep the rest.
+    'incline_walk_1_down5'      -> 'incline_walk_down5'
+    'stairs_1_10_down'          -> 'stairs_down'
+    'sit_to_stand_1_2_short-arm'-> 'sit_to_stand_short-arm'
+    'normal_walk_1_0-6'         -> 'normal_walk_0-6'  ('-' is a decimal point)
+    """
+    return '_'.join(p for p in folder_name.split('_') if not p.isdigit())
 
 
 def label_user(name):

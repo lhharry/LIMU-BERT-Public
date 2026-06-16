@@ -29,34 +29,66 @@ LEFT_GYRO   = ['thigh_imu_l_gyro_x',  'thigh_imu_l_gyro_y',  'thigh_imu_l_gyro_z
 RIGHT_ACCEL = ['thigh_imu_r_accel_x', 'thigh_imu_r_accel_y', 'thigh_imu_r_accel_z']
 RIGHT_GYRO  = ['thigh_imu_r_gyro_x',  'thigh_imu_r_gyro_y',  'thigh_imu_r_gyro_z']
 
-LEG_COLS = {
-    'left':  [LEFT_ACCEL  + LEFT_GYRO],
-    'right': [RIGHT_ACCEL + RIGHT_GYRO],
-    'both':  [LEFT_ACCEL  + LEFT_GYRO, RIGHT_ACCEL + RIGHT_GYRO],
+# leg -> list of (sensor_cols, activity_flag column). Mirrors scherpereel.py:
+# each trial ships an <name>_activity_flag.csv (time,left,right) row-aligned to
+# the exo csv; only rows where the per-leg flag == 1 are the subject actually
+# performing the labeled activity (the rest are setup / transition / rest).
+LEG_SPEC = {
+    'left':  [(LEFT_ACCEL  + LEFT_GYRO,  'left')],
+    'right': [(RIGHT_ACCEL + RIGHT_GYRO, 'right')],
+    'both':  [(LEFT_ACCEL  + LEFT_GYRO,  'left'),
+              (RIGHT_ACCEL + RIGHT_GYRO, 'right')],
 }
 
 RAD_PER_DEG = 1.0 / 57.29578
 
+DENSE_ACTIVITIES = ["stand", "walk", "turn", "jog",
+                    "rampascent", "rampdescent",
+                    "stairascent", "stairdescent", "sit-stand-transition"]
 
-def get_base_activity(folder_name):
-    """'ball_toss_1_2_center_off' -> 'ball_toss'  (before first digit token)"""
-    parts = folder_name.split('_')
-    for i, p in enumerate(parts):
-        if p.isdigit():
-            return '_'.join(parts[:i])
-    return folder_name
+WALK_JOG_SPEED_THRESHOLD = 1.5
+
+def reconstruct_label(folder_name):
+    """Drop pure-integer trial/step index tokens, keep the rest.
+    'incline_walk_1_down5'      -> 'incline_walk_down5'
+    'stairs_1_10_down'          -> 'stairs_down'
+    'sit_to_stand_1_2_short-arm'-> 'sit_to_stand_short-arm'
+    'normal_walk_1_0-6'         -> 'normal_walk_0-6'  ('-' is a decimal point)
+    """
+    return '_'.join(p for p in folder_name.split('_') if not p.isdigit())
 
 
-def build_label_map(root):
-    activities = set()
-    for subj in os.listdir(root):
-        subj_path = os.path.join(root, subj)
-        if not os.path.isdir(subj_path) or not subj.startswith('BT'):
-            continue
-        for folder in os.listdir(subj_path):
-            if os.path.isdir(os.path.join(subj_path, folder)):
-                activities.add(get_base_activity(folder))
-    return {act: i for i, act in enumerate(sorted(activities))}
+def dense_label(folder_name):
+    """Map a raw trial folder name to one of DENSE_ACTIVITIES, or None to drop."""
+    name = reconstruct_label(folder_name)
+    if name.startswith('incline_walk'):
+        if 'up' in name:   return 'rampascent'
+        if 'down' in name: return 'rampdescent'
+        return None
+    if name.startswith('normal_walk'):
+        toks = name.split('_')
+        if 'shuffle' in toks or 'skip' in toks:   # not steady-speed walking -> drop
+            return None
+        for t in toks:                            # find the speed token, e.g. '1-2'
+            try:                                  # ('-' is a decimal point -> 1.2)
+                speed = float(t.replace('-', '.'))
+            except ValueError:
+                continue                          # skips 'normal','walk','on'/'off'/'hilo'
+            return 'jog' if speed > WALK_JOG_SPEED_THRESHOLD else 'walk'
+        return None
+    if name.startswith('sit_to_stand'):
+        return 'sit-stand-transition'
+    if name.startswith('stairs'):
+        if 'up' in name:   return 'stairascent'
+        if 'down' in name: return 'stairdescent'
+        return None
+    if name.startswith('turn_and_step'):
+        return 'turn'
+    return None
+
+
+def build_label_map():
+    return {name: i for i, name in enumerate(DENSE_ACTIVITIES)}
 
 
 def label_user(name):
@@ -86,8 +118,9 @@ def down_sample(data, raw_sr, target_sr):
     return np.array(result)
 
 
-def load_sensor_data(path, label_map, seq_len, raw_sr, target_sr, col_sets):
+def load_sensor_data(path, label_map, seq_len, raw_sr, target_sr, leg):
     data_all, label_all = [], []
+    n_no_flag = 0
 
     for subj in sorted(os.listdir(path)):
         subj_path = os.path.join(path, subj)
@@ -99,10 +132,10 @@ def load_sensor_data(path, label_map, seq_len, raw_sr, target_sr, col_sets):
             folder_path = os.path.join(subj_path, folder)
             if not os.path.isdir(folder_path):
                 continue
-            base_act = get_base_activity(folder)
-            if base_act not in label_map:
+            dense = dense_label(folder)
+            if dense is None:
                 continue
-            label_act = label_map[base_act]
+            label_act = label_map[dense]
 
             exo_file = os.path.join(folder_path, folder + '_exo.csv')
             if not os.path.exists(exo_file):
@@ -110,48 +143,67 @@ def load_sensor_data(path, label_map, seq_len, raw_sr, target_sr, col_sets):
                 if not candidates:
                     continue
                 exo_file = os.path.join(folder_path, candidates[0])
-
             df = pd.read_csv(exo_file)
 
-            for cols in col_sets:
-                if any(c not in df.columns for c in cols):
+            flag_files = [f for f in os.listdir(folder_path) if f.endswith('_activity_flag.csv')]
+            if not flag_files:
+                n_no_flag += 1
+                continue
+            flag_df = pd.read_csv(os.path.join(folder_path, flag_files[0]))
+
+            # align exo and flag row-for-row (same 200 Hz time base)
+            m = min(len(df), len(flag_df))
+            df, flag_df = df.iloc[:m], flag_df.iloc[:m]
+
+            for cols, flag_col in LEG_SPEC[leg]:
+                if any(c not in df.columns for c in cols) or flag_col not in flag_df.columns:
                     continue
 
                 sensor = df[cols].values.astype(float)
-                finite = np.all(np.isfinite(sensor), axis=1)
-                sensor = sensor[finite]
-                if len(sensor) == 0:
-                    continue
+                flag   = (flag_df[flag_col].values == 1)
 
-                sensor[:, 3:] *= RAD_PER_DEG  # gyro deg/s -> rad/s
+                # Keep ALL flag==1 rows of this trial (one activity), concatenated
+                # in time order, then window (same as scherpereel.py).
+                keep = flag & np.all(np.isfinite(sensor), axis=1)
+                seg = sensor[keep]
+                if len(seg) < seq_len * (raw_sr // target_sr):
+                    continue  # <1 window worth of active data in whole trial
 
-                sensor_down = down_sample(sensor, raw_sr, target_sr)
-                n_windows = sensor_down.shape[0] // seq_len
+                seg = seg.copy()
+                seg[:, 3:] *= RAD_PER_DEG  # gyro deg/s -> rad/s
+
+                seg_down = down_sample(seg, raw_sr, target_sr)
+                n_windows = seg_down.shape[0] // seq_len
                 if n_windows == 0:
                     continue
-                sensor_down = sensor_down[:n_windows * seq_len].reshape(n_windows, seq_len, 6)
+                seg_down = seg_down[:n_windows * seq_len].reshape(n_windows, seq_len, 6)
 
                 lbl = np.full((n_windows, seq_len, 2), [[label_act, label_u]], dtype=float)
-                data_all.append(sensor_down)
+                data_all.append(seg_down)
                 label_all.append(lbl)
 
+    if n_no_flag:
+        print(f'WARNING: {n_no_flag} trials had no activity_flag.csv and were skipped.')
     return data_all, label_all
 
 
 def preprocess(path, path_save, version, leg, raw_sr=RAW_SR, target_sr=TARGET_SR, seq_len=SEQ_LEN):
-    label_map = build_label_map(path)
+    label_map = build_label_map()
     print(f'Label map ({len(label_map)} classes):', label_map)
 
     data_list, label_list = load_sensor_data(
-        path, label_map, seq_len, raw_sr, target_sr, LEG_COLS[leg])
+        path, label_map, seq_len, raw_sr, target_sr, leg)
     data  = np.concatenate(data_list,  0).astype(np.float32)
     label = np.concatenate(label_list, 0).astype(np.float32)
 
-    print(f'All data processed [{leg}]. data={data.shape}  label={label.shape}')
+    ids, counts = np.unique(label[:, 0, 0].astype(int), return_counts=True)
+    dist = {DENSE_ACTIVITIES[i]: int(c) for i, c in zip(ids, counts)}
+    print(f'All data processed [{leg}, flag==1 only]. data={data.shape}  label={label.shape}')
+    print(f'Per-class windows: {dist}')
     os.makedirs(path_save, exist_ok=True)
     np.save(os.path.join(path_save, 'data_'  + version + '.npy'), data)
     np.save(os.path.join(path_save, 'label_' + version + '.npy'), label)
-
+    
     key = f'scherpereel_exo_{version}'
     entry = {key: {
         'sr': target_sr, 'seq_len': seq_len, 'dimension': 6,

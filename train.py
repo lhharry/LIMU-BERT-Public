@@ -100,20 +100,41 @@ class Trainer(object):
         else:
             return torch.cat(results, 0).cpu().numpy()
 
+    def eval_loss(self, func_loss, data_loader):
+        """ Average loss over a data loader (eval mode, no gradient), sample-weighted """
+        self.model.eval()
+        model = self.model.to(self.device)
+        loss_sum = 0.0
+        count = 0
+        for batch in data_loader:
+            batch = [t.to(self.device) for t in batch]
+            with torch.no_grad():
+                loss = func_loss(model, batch).mean()
+            n = batch[0].size(0)
+            loss_sum += loss.item() * n
+            count += n
+        return loss_sum / count
+
     def train(self, func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
-              , model_file=None, data_parallel=False, load_self=False, scheduler=None, early_stop_patience=None):
+              , model_file=None, data_parallel=False, load_self=False, scheduler=None, early_stop_patience=None,
+              func_loss_eval=None):
         """ Train Loop """
         self.load(model_file, load_self)
         model = self.model.to(self.device)
         if data_parallel: # use Data Parallelism with Multi-GPU
             model = nn.DataParallel(model)
 
+        # validation loss function used for best-model saving / early stopping;
+        # fall back to the training loss if no eval-mode variant is provided
+        if func_loss_eval is None:
+            func_loss_eval = func_loss
+
         global_step = 0 # global iteration steps regardless of epochs
         best_stat = None
         model_best = model.state_dict()
         eval_every = 10
-        vali_f1_best = -1.0     # for both best-model saving and early stopping
-        no_improve_count = 0    # consecutive eval epochs without vali_f1 improvement
+        vali_loss_best = 1e6    # for both best-model saving and early stopping (lower is better)
+        no_improve_count = 0    # consecutive eval epochs without vali_loss improvement
         for e in range(self.cfg.n_epochs):
             loss_sum = 0.0 # the sum of iteration losses to get average loss in every epoch
             time_sum = 0.0
@@ -145,11 +166,12 @@ class Trainer(object):
                 train_acc, train_f1 = self.run(func_forward, func_evaluate, data_loader_train)
                 test_acc, test_f1 = self.run(func_forward, func_evaluate, data_loader_test)
                 vali_acc, vali_f1 = self.run(func_forward, func_evaluate, data_loader_vali)
-                print('Epoch %d/%d : Average Loss %5.4f, Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f'
-                      % (e+1, self.cfg.n_epochs, loss_sum / len(data_loader_train), train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1))
-                # save best model and track early stopping using vali_f1
-                if vali_f1 > vali_f1_best:
-                    vali_f1_best = vali_f1
+                vali_loss = self.eval_loss(func_loss_eval, data_loader_vali)
+                print('Epoch %d/%d : Average Loss %5.4f, Vali Loss %5.4f, Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f'
+                      % (e+1, self.cfg.n_epochs, loss_sum / len(data_loader_train), vali_loss, train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1))
+                # save best model and track early stopping using vali_loss (lower is better)
+                if vali_loss < vali_loss_best:
+                    vali_loss_best = vali_loss
                     best_stat = (train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1)
                     model_best = copy.deepcopy(model.state_dict())
                     self.save(0)
@@ -157,7 +179,7 @@ class Trainer(object):
                 else:
                     no_improve_count += 1
                 if early_stop_patience is not None and no_improve_count >= early_stop_patience:
-                    print('Early stopping at epoch %d (no vali F1 improvement for %d evaluations).'
+                    print('Early stopping at epoch %d (no vali loss improvement for %d evaluations).'
                           % (e + 1, early_stop_patience))
                     break
             else:

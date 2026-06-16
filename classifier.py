@@ -63,6 +63,12 @@ def classify_embeddings(args, data, labels, label_index, training_rate, label_ra
         loss = criterion(logits, label)
         return loss
 
+    def func_loss_eval(model, batch):
+        inputs, label = batch
+        logits = model(inputs, False)
+        loss = criterion(logits, label)
+        return loss
+
     def func_forward(model, batch):
         inputs, label = batch
         logits = model(inputs, False)
@@ -73,7 +79,8 @@ def classify_embeddings(args, data, labels, label_index, training_rate, label_ra
         return stat
 
     trainer.train(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali,
-                  scheduler=scheduler, early_stop_patience=recipe.early_stop_patience)
+                  scheduler=scheduler, early_stop_patience=recipe.early_stop_patience,
+                  func_loss_eval=func_loss_eval)
     label_estimate_test = trainer.run(func_forward, None, data_loader_test)
     return label_test, label_estimate_test
 
