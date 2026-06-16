@@ -9,9 +9,15 @@ Aligned with scherpereel.py / camargo口径:
     - accel already m/s^2, gyro already rad/s  -> NO unit conversion
 
 Segmentation note: Molinaro has NO per-sample activity flag. Each trial FOLDER
-is one steady-state locomotion bout; the activity is the first underscore token
-of the folder name (e.g. "LG_C0p0_S1p25_UC_1_1" -> "LG"). Transition modes
-TRA/TRB are excluded via --include_modes (default: LG RA RD SA SD ST).
+is one steady-state locomotion bout; the mode is the first underscore token of
+the folder name (e.g. "LG_C0p0_S1p25_UC_1_1" -> "LG"). Transition modes TRA/TRB
+are excluded via --include_modes (default: LG RA RD SA SD ST).
+
+7-class space: LG (level ground) is split into walk/jog by the folder's speed
+token S<x>p<y> (m/s, 'p' = decimal point; speed > 1.5 -> jog, else walk, matching
+scherpereel.py). RA/RD/SA/SD/ST map to rampascent/rampdescent/stairascent/
+stairdescent/stand. 'stand' is kept last to align with scherpereel's dense ids.
+Overground/standing trials carry speed S0p0 (= 0.0) and so land in walk/stand.
 
 
 
@@ -21,6 +27,7 @@ Usage:
 """
 
 import os
+import re
 import json
 import argparse
 from pathlib import Path
@@ -45,19 +52,33 @@ LEG_COLS = {
     'both':  [LEFT_COLS, RIGHT_COLS],
 }
 
-DENSE_ACTIVITIES = ["stand", "walk", "turn", "jog",
-                    "rampascent", "rampdescent",
-                    "stairascent", "stairdescent", "sit-stand-transition"]
+WALK_JOG_SPEED_THRESHOLD = 1.5   # m/s; speed > threshold -> jog (matches scherpereel.py)
+
+# 7-class space: subset of the shared dense vocabulary (molinaro has no turn /
+# sit-stand-transition trials). LG is split into walk/jog by speed. 'stand' is
+# kept last to line up with scherpereel's dense ordering.
+ACTIVITIES_7 = ["walk", "jog", "rampascent", "rampdescent",
+                "stairascent", "stairdescent", "stand"]
+
+MODE_TO_ACTIVITY = {
+    'RA': 'rampascent', 'RD': 'rampdescent',
+    'SA': 'stairascent', 'SD': 'stairdescent', 'ST': 'stand',
+}
 
 
-def reconstruct_label(folder_name):
-    """Drop pure-integer trial/step index tokens, keep the rest.
-    'incline_walk_1_down5'      -> 'incline_walk_down5'
-    'stairs_1_10_down'          -> 'stairs_down'
-    'sit_to_stand_1_2_short-arm'-> 'sit_to_stand_short-arm'
-    'normal_walk_1_0-6'         -> 'normal_walk_0-6'  ('-' is a decimal point)
+def parse_speed(folder_name):
+    """Speed token S<x>p<y> (m/s) -> float ('p' is the decimal point).
+    'LG_C0p0_S1p25_UC_1_1' -> 1.25.  Overground/standing trials use S0p0 -> 0.0.
     """
-    return '_'.join(p for p in folder_name.split('_') if not p.isdigit())
+    m = re.search(r'(?:^|_)S(\d+)p(\d+)(?:_|$)', folder_name)
+    return float(f'{m.group(1)}.{m.group(2)}') if m else 0.0
+
+
+def folder_to_activity(folder_name, mode):
+    """Map a trial folder to one of ACTIVITIES_7. LG -> walk/jog by speed."""
+    if mode == 'LG':
+        return 'jog' if parse_speed(folder_name) > WALK_JOG_SPEED_THRESHOLD else 'walk'
+    return MODE_TO_ACTIVITY.get(mode)
 
 
 def label_user(name):
@@ -103,12 +124,15 @@ def discover_trials(root_dir, include_modes):
     return out
 
 
-def load_sensor_data(trials, label_map, leg, seq_len, raw_sr, target_sr):
+def load_sensor_data(trials, act_index, leg, seq_len, raw_sr, target_sr):
     data_all, label_all = [], []
     skipped_short = 0
 
     for path, mode, subj in trials:
-        label_act = label_map[mode]
+        act = folder_to_activity(path.parent.name, mode)
+        if act is None:
+            continue
+        label_act = act_index[act]
         label_u   = label_user(subj)
         df = pd.read_csv(path)
 
@@ -144,28 +168,30 @@ def preprocess(path, path_save, version, leg, include_modes,
     trials = discover_trials(path, include_modes)
     if not trials:
         raise SystemExit(f'No trials found under {path} matching modes {include_modes}.')
-    subjects = sorted({s for _, _, s in trials})
-    modes    = sorted({m for _, m, _ in trials})
-    label_map = {m: i for i, m in enumerate(modes)}
+    subjects  = sorted({s for _, _, s in trials})
+    act_index = {a: i for i, a in enumerate(ACTIVITIES_7)}
     print(f'Found {len(trials)} trials, {len(subjects)} subjects.')
-    print(f'Label map ({len(modes)} classes): {label_map}')
+    print(f'Label map ({len(ACTIVITIES_7)} classes): {act_index}')
 
-    data_list, label_list = load_sensor_data(trials, label_map, leg, seq_len, raw_sr, target_sr)
+    data_list, label_list = load_sensor_data(trials, act_index, leg, seq_len, raw_sr, target_sr)
     data  = np.concatenate(data_list,  0).astype(np.float32)
     label = np.concatenate(label_list, 0).astype(np.float32)
 
+    ids, counts = np.unique(label[:, 0, 0].astype(int), return_counts=True)
+    dist = {ACTIVITIES_7[i]: int(c) for i, c in zip(ids, counts)}
     print(f'All data processed [{leg}]. data={data.shape}  label={label.shape}')
+    print(f'Per-class windows: {dist}')
     os.makedirs(path_save, exist_ok=True)
     np.save(os.path.join(path_save, 'data_'  + version + '.npy'), data)
     np.save(os.path.join(path_save, 'label_' + version + '.npy'), label)
     with open(os.path.join(path_save, 'label_map.json'), 'w') as f:
-        json.dump(label_map, f, indent=2)
+        json.dump(act_index, f, indent=2)
 
     key = f'molinaro_{version}'
     entry = {key: {
         'sr': target_sr, 'seq_len': seq_len, 'dimension': 6,
-        'activity_label_index': 0, 'activity_label_size': len(label_map),
-        'activity_label': list(label_map.keys()),
+        'activity_label_index': 0, 'activity_label_size': len(ACTIVITIES_7),
+        'activity_label': list(ACTIVITIES_7),
         'user_label_index': 1, 'user_label_size': len(subjects),
         'size': int(data.shape[0]),
     }}
@@ -177,14 +203,14 @@ def preprocess(path, path_save, version, leg, include_modes,
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('--input_dir',     default=DATASET_PATH)
-    p.add_argument('--leg',           choices=['left', 'right', 'both'], default='left')
+    p.add_argument('--leg',           choices=['left', 'right', 'both'], default='both')
     p.add_argument('--include_modes', nargs='*', default=DEFAULT_MODES)
     p.add_argument('--tgt_sr',        type=int, default=TARGET_SR)
     p.add_argument('--seq_len',       type=int, default=SEQ_LEN)
     args = p.parse_args()
 
     suffix  = '' if args.leg == 'left' else f'_{args.leg}'
-    version = f'{args.tgt_sr}_{args.seq_len}{suffix}'
+    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_7cls'
 
     preprocess(args.input_dir, 'dataset/molinaro', version, args.leg, args.include_modes,
                target_sr=args.tgt_sr, seq_len=args.seq_len)

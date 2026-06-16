@@ -138,9 +138,9 @@
         "dimension": 6,
         "activity_label_index": 0,
         "activity_label_size": 9,
-        "activity_label": ["stand", "walk", "turn", "jog",
+        "activity_label": ["walk", "turn", "jog",
                   "rampascent", "rampdescent",
-                  "stairascent", "stairdescent", "sit-stand-transition"],
+                  "stairascent", "stairdescent", "sit-stand-transition", "stand"],
         "user_label_index": 1,
         "user_label_size": 12,
         "model_label_index": -1,
@@ -155,7 +155,6 @@
         "activity_label_index": 0,
         "activity_label_size": 9,
         "activity_label": [
-            "stand",
             "walk",
             "turn",
             "jog",
@@ -163,7 +162,8 @@
             "rampdescent",
             "stairascent",
             "stairdescent",
-            "sit-stand-transition"
+            "sit-stand-transition",
+            "stand"
         ],
         "user_label_index": 1,
         "user_label_size": 12,
@@ -253,7 +253,6 @@
         "activity_label_index": 0,
         "activity_label_size": 9,
         "activity_label": [
-            "stand",
             "walk",
             "turn",
             "jog",
@@ -261,7 +260,8 @@
             "rampdescent",
             "stairascent",
             "stairdescent",
-            "sit-stand-transition"
+            "sit-stand-transition",
+            "stand"
         ],
         "user_label_index": 1,
         "user_label_size": 17,
@@ -290,6 +290,48 @@
         "user_label_index": 1,
         "user_label_size": 25,
         "size": 24552
+    },
+
+    "molinaro_10_20_both_dense_7cls": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 7,
+        "activity_label": [
+            "walk",
+            "jog",
+            "rampascent",
+            "rampdescent",
+            "stairascent",
+            "stairdescent",
+            "stand"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 25,
+        "size": 24552
+    },
+
+    "merged_10_20_merged_9cls": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 9,
+        "activity_label": [
+            "stand",
+            "walk",
+            "turn",
+            "jog",
+            "rampascent",
+            "rampdescent",
+            "stairascent",
+            "stairdescent",
+            "sit-stand-transition"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 73,
+        "size": 57927
     },
 
     "real_10_20_both": {

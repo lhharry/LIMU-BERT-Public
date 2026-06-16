@@ -17,6 +17,7 @@ __pycache__/
 dataset/camargo/
 dataset/jetson*/
 dataset/molinaro/
+dataset/merged/
 dataset/scherpereel/
 dataset/scherpereel_exo/
 dataset/camargo_ink_idle/

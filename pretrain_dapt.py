@@ -49,9 +49,11 @@ def parse_args():
     p = argparse.ArgumentParser(description="LIMU-BERT domain-adaptive continued pretraining")
     # Positional args mirror handle_argv (pretrain.py) so configs resolve identically.
     p.add_argument("model_version", type=str, help="BERT config version, e.g. v3 (-> base_v3)")
-    p.add_argument("dataset", type=str, choices=["hhar", "motion", "uci", "shoaib", "camargo"])
+    p.add_argument("dataset", type=str,
+                   choices=["hhar", "motion", "uci", "shoaib", "camargo", "merged"])
     p.add_argument("dataset_version", type=str,
-                   choices=["10_100", "20_120", "10_20", "10_60", "10_20_dense", "10_20_dense_8cls"])
+                   choices=["10_100", "20_120", "10_20", "10_60", "10_20_dense",
+                            "10_20_dense_8cls", "10_20_merged_9cls"])
     p.add_argument("-f", "--model_file", type=str, required=True,
                    help="Starting checkpoint to continue from, e.g. saved/bertx/limu_bert_x "
                         "(a trailing .pt is optional).")

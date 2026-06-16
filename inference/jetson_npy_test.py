@@ -50,13 +50,13 @@ from utils import Preprocess4Normalization
 # -----------------------------------------------------------------------------
 CONFIG = {
     # preprocessed jetson NPY (produced by dataset/jetson_leg.py)
-    "npy_dir": Path("dataset/jetson_leg"),
-    "npy_version": "10_20_both",        # data_/label_<version>.npy in npy_dir
+    "npy_dir": Path("dataset/scherpereel"),  # directory containing data_/label_<version>.npy
+    "npy_version": "10_20_both_dense_9cls",        # data_/label_<version>.npy in npy_dir
 
     # model checkpoint (this fixes seq_len, sr, #features, #classes via its config)
-    "model_path": Path("saved/bert_classifier_base_gru_camargo_10_20_dense_8cls/limu_gru_dapt.pt"),
-    "dataset": "camargo",               # defines the model's class space + seq_len/sr/dim
-    "dataset_version": "10_20_dense_8cls",
+    "model_path": Path("saved/bert_classifier_base_gru_scherpereel_10_20_both_dense_9cls/limu_gru_v3_dapt_both_scher.pt"),
+    "dataset": "scherpereel",            # defines the model's class space + seq_len/sr/dim
+    "dataset_version": "10_20_both_dense_9cls",
     "bert_version": "v3",
     "classifier_version": "v3",
 
