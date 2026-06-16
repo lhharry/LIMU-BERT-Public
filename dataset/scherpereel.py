@@ -80,14 +80,16 @@ def dense_label(folder_name):
         if 'down' in name: return 'rampdescent'
         return None
     if name.startswith('normal_walk'):
-        suffix = name[len('normal_walk_'):] if name.startswith('normal_walk_') else ''
-        if suffix in ('shuffle', 'skip'):     # not normal locomotion -> drop
+        toks = name.split('_')
+        if 'shuffle' in toks or 'skip' in toks:   # not steady-speed walking -> drop
             return None
-        try:
-            speed = float(suffix.replace('-', '.'))   # '0-6' -> 0.6
-        except ValueError:
-            return None
-        return 'jog' if speed > WALK_JOG_SPEED_THRESHOLD else 'walk'
+        for t in toks:                            # find the speed token, e.g. '1-2'
+            try:                                  # ('-' is a decimal point -> 1.2)
+                speed = float(t.replace('-', '.'))
+            except ValueError:
+                continue                          # skips 'normal','walk','on'/'off'/'hilo'
+            return 'jog' if speed > WALK_JOG_SPEED_THRESHOLD else 'walk'
+        return None
     if name.startswith('sit_to_stand'):
         return 'sit-stand-transition'
     if name.startswith('stairs'):
@@ -231,13 +233,13 @@ def preprocess(path, path_save, version, leg, raw_sr=RAW_SR, target_sr=TARGET_SR
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('--leg',     choices=['left', 'right', 'both'], default='left')
+    p.add_argument('--leg',     choices=['left', 'right', 'both'], default='both')
     p.add_argument('--tgt_sr',  type=int, default=TARGET_SR)
     p.add_argument('--seq_len', type=int, default=SEQ_LEN)
     args = p.parse_args()
 
     suffix  = '' if args.leg == 'left' else f'_{args.leg}'
-    version = f'{args.tgt_sr}_{args.seq_len}{suffix}'
+    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_9cls'
 
     preprocess(DATASET_PATH, 'dataset/scherpereel', version, args.leg,
                target_sr=args.tgt_sr, seq_len=args.seq_len)

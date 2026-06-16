@@ -147,6 +147,28 @@
         "model_label_size": 0,
         "size": 1890
     },
+    
+    "scherpereel_10_20_both_dense_9cls": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 9,
+        "activity_label": [
+            "stand",
+            "walk",
+            "turn",
+            "jog",
+            "rampascent",
+            "rampdescent",
+            "stairascent",
+            "stairdescent",
+            "sit-stand-transition"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 12,
+        "size": 3789
+    },
 
     "scherpereel_10_20": {
         "sr": 10,
@@ -222,6 +244,28 @@
         "user_label_index": 1,
         "user_label_size": 17,
         "size": 46064
+    },
+    
+    "scherpereel_exo_10_20_both_dense_9cls": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 9,
+        "activity_label": [
+            "stand",
+            "walk",
+            "turn",
+            "jog",
+            "rampascent",
+            "rampdescent",
+            "stairascent",
+            "stairdescent",
+            "sit-stand-transition"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 17,
+        "size": 8215
     },
 
     "molinaro_10_20": {

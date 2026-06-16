@@ -8,6 +8,7 @@
 import copy
 import os
 import time
+from collections import deque
 
 import numpy as np
 import torch
@@ -117,7 +118,7 @@ class Trainer(object):
 
     def train(self, func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
               , model_file=None, data_parallel=False, load_self=False, scheduler=None, early_stop_patience=None,
-              func_loss_eval=None):
+              func_loss_eval=None, vali_smooth_window=5):
         """ Train Loop """
         self.load(model_file, load_self)
         model = self.model.to(self.device)
@@ -133,8 +134,11 @@ class Trainer(object):
         best_stat = None
         model_best = model.state_dict()
         eval_every = 10
-        vali_loss_best = 1e6    # for both best-model saving and early stopping (lower is better)
-        no_improve_count = 0    # consecutive eval epochs without vali_loss improvement
+        # trailing moving average of vali loss smooths out single-eval spikes on the
+        # tiny validation set; selection / early stopping use the smoothed value
+        vali_loss_hist = deque(maxlen=vali_smooth_window)
+        vali_loss_smooth_best = 1e6     # for both best-model saving and early stopping (lower is better)
+        no_improve_count = 0    # consecutive eval epochs without smoothed vali_loss improvement
         for e in range(self.cfg.n_epochs):
             loss_sum = 0.0 # the sum of iteration losses to get average loss in every epoch
             time_sum = 0.0
@@ -167,11 +171,13 @@ class Trainer(object):
                 test_acc, test_f1 = self.run(func_forward, func_evaluate, data_loader_test)
                 vali_acc, vali_f1 = self.run(func_forward, func_evaluate, data_loader_vali)
                 vali_loss = self.eval_loss(func_loss_eval, data_loader_vali)
-                print('Epoch %d/%d : Average Loss %5.4f, Vali Loss %5.4f, Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f'
-                      % (e+1, self.cfg.n_epochs, loss_sum / len(data_loader_train), vali_loss, train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1))
-                # save best model and track early stopping using vali_loss (lower is better)
-                if vali_loss < vali_loss_best:
-                    vali_loss_best = vali_loss
+                vali_loss_hist.append(vali_loss)
+                vali_loss_smooth = sum(vali_loss_hist) / len(vali_loss_hist)
+                print('Epoch %d/%d : Average Loss %5.4f, Vali Loss %5.4f (smooth %5.4f), Accuracy: %0.3f/%0.3f/%0.3f, F1: %0.3f/%0.3f/%0.3f'
+                      % (e+1, self.cfg.n_epochs, loss_sum / len(data_loader_train), vali_loss, vali_loss_smooth, train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1))
+                # save best model and track early stopping using smoothed vali_loss (lower is better)
+                if vali_loss_smooth < vali_loss_smooth_best:
+                    vali_loss_smooth_best = vali_loss_smooth
                     best_stat = (train_acc, vali_acc, test_acc, train_f1, vali_f1, test_f1)
                     model_best = copy.deepcopy(model.state_dict())
                     self.save(0)
@@ -179,7 +185,7 @@ class Trainer(object):
                 else:
                     no_improve_count += 1
                 if early_stop_patience is not None and no_improve_count >= early_stop_patience:
-                    print('Early stopping at epoch %d (no vali loss improvement for %d evaluations).'
+                    print('Early stopping at epoch %d (no smoothed vali loss improvement for %d evaluations).'
                           % (e + 1, early_stop_patience))
                     break
             else:

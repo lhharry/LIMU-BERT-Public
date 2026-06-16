@@ -219,13 +219,13 @@ def preprocess(path, path_save, version, leg, raw_sr=RAW_SR, target_sr=TARGET_SR
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('--leg',     choices=['left', 'right', 'both'], default='left')
+    p.add_argument('--leg',     choices=['left', 'right', 'both'], default='both')
     p.add_argument('--tgt_sr',  type=int, default=TARGET_SR)
     p.add_argument('--seq_len', type=int, default=SEQ_LEN)
     args = p.parse_args()
 
     suffix  = '' if args.leg == 'left' else f'_{args.leg}'
-    version = f'{args.tgt_sr}_{args.seq_len}{suffix}'
+    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_9cls'
 
     preprocess(DATASET_PATH, 'dataset/scherpereel_exo', version, args.leg,
                target_sr=args.tgt_sr, seq_len=args.seq_len)
