@@ -64,7 +64,7 @@ LABEL_TO_DENSE = {
 # Per-side source columns in camargo axis order (jetson y->x, x->y, z->z),
 # accel first then gyro. Matches jetson_compare.load_jetson_trial.
 def side_cols(side):
-    return [f"{side}_y", f"{side}_x", f"{side}_z"]
+    return [f"{side}_x", f"{side}_y", f"{side}_z"]
 
 LEG_SIDES = {'left': ['Left'], 'right': ['Right'], 'both': ['Left', 'Right']}
 
@@ -104,7 +104,7 @@ def discover_trials(root):
         if not accel:
             continue
         toks = os.path.basename(dirpath).split('_')
-        if len(toks) < 5 or toks[4].lower() != 'leg':   # position must be leg
+        if len(toks) < 5 or toks[4].lower() != 'pocket':   # position must be pocket
             continue
         if 'zeroed' in toks[5:]:                          # gravity-removed variant
             print(f'  [skip] zeroed variant: {os.path.basename(dirpath)}')
@@ -135,7 +135,6 @@ def load_trial_sides(accel_path, gyro_path, label_path, sides):
     for side in sides:
         cols = side_cols(side)
         a = acc[cols].to_numpy(dtype=float)
-        a[:, 0] *= -1
         g = gyr[cols].to_numpy(dtype=float)
         sensors[side] = np.hstack([a, g])     # (N,6): accel xyz, gyro xyz
     return dense, sensors
@@ -226,7 +225,7 @@ if __name__ == '__main__':
     args = p.parse_args()
 
     suffix  = '' if args.leg == 'left' else f'_{args.leg}'
-    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_negy_xz'
+    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_xyz_pocket'
 
     preprocess(args.input_dir, 'dataset/jetson_leg', version, args.leg,
                target_sr=args.tgt_sr, seq_len=args.seq_len)

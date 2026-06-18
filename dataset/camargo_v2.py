@@ -56,8 +56,8 @@ RAW_TO_DENSE = {
     "stairdescent-walk":  "walk",
 }
 
-SENSOR_COLS = ['thigh_Accel_X', 'thigh_Accel_Y', 'thigh_Accel_Z',
-               'thigh_Gyro_X', 'thigh_Gyro_Y', 'thigh_Gyro_Z']
+SENSOR_COLS = ['thigh_Accel_Y', 'thigh_Accel_X', 'thigh_Accel_Z',
+               'thigh_Gyro_Y', 'thigh_Gyro_X', 'thigh_Gyro_Z']
 
 
 def label_activity(name):
@@ -118,6 +118,7 @@ def load_sensor_data(path, seq_len, raw_sr, target_sr):
                 df = pd.read_csv(path_exp)
                 sensor = df[SENSOR_COLS].values.astype(float)
                 sensor[:, :3] *= 9.81  # g → m/s², matching motion.py and uci.py convention
+                sensor
                 acts_raw = df['Label'].values
 
                 # Remap raw labels (incl. transitions) to dense indices FIRST,
@@ -155,8 +156,8 @@ def preprocess(path, path_save, version, raw_sr=120, target_sr=10, seq_len=120):
     label = np.concatenate(label, 0)
     print('All data processed. Size: %d' % (data.shape[0]))
     os.makedirs(path_save, exist_ok=True)
-    np.save(os.path.join(path_save, 'data_' + version + '.npy'), np.array(data))
-    np.save(os.path.join(path_save, 'label_' + version + '.npy'), np.array(label))
+    np.save(os.path.join(path_save, 'data_' + version + '_yxz' +'.npy'), np.array(data))
+    np.save(os.path.join(path_save, 'label_' + version + '_yxz' + '.npy'), np.array(label))
     return data, label
 
 

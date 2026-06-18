@@ -112,7 +112,7 @@ def run_one(run_cfg, label_rate, seed, gpu=None, dry=False):
         "--seed", str(seed),
         "--save_model", "bench_" + rid,
         "--out_json", json_path,
-        "--balance", str(run_cfg.get("balance", 1)),
+        "--balance", str(run_cfg.get("balance", 0)),
         "--label_index", str(run_cfg.get("label_index", LABEL_INDEX)),
     ]
     if run_cfg.get("pretrain_model"):

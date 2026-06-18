@@ -9,9 +9,9 @@ bench_run16 holds four method families, all trained on the merged dataset
         supervised ClassifierGRU, raw 6-dim window -> 9-class logits (no BERT).
   2. bert_classifier_base_gru_merged_*/..._finetune__*
         BERTClassifier (transformer + GRU head), transformer fine-tuned.
-  3. bert_classifier_base_gru_merged_*/..._frozen__*
-        BERTClassifier, transformer frozen at foundation weights.
-        (frozen vs finetune are byte-identical architectures; the frozen flag
+  3. bert_classifier_base_gru_merged_*/..._finetune-high-lr__*
+        BERTClassifier, transformer fine-tuned with high learning rate.
+        (finetune-high-lr vs finetune are byte-identical architectures; the finetune-high-lr flag
          only mattered during training, so at inference both load the same way.)
   4. classifier_base_gru_merged_*/..._separated__*
         standalone GRU head trained on cached FOUNDATION-BERT embeddings.
@@ -52,23 +52,23 @@ from utils import Preprocess4Normalization
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/bench_run16"),
-    "gru_subdir": "bench_gru_merged_10_20_9cls",
-    "bert_subdir": "bert_classifier_base_gru_merged_10_20_9cls",
-    "sep_subdir": "classifier_base_gru_merged_10_20_9cls",
+    "run_dir": Path("saved/bench_run26"),
+    "gru_subdir": "bench_gru_camargo_10_20_dense_8cls_yxz",
+    "bert_subdir": "bert_classifier_base_gru_camargo_10_20_dense_8cls_yxz",
+    "sep_subdir": "classifier_base_gru_camargo_10_20_dense_8cls_yxz",
 
     # class space + seq_len / sr / dim
-    "dataset": "merged",
-    "dataset_version": "10_20_merged_9cls",
+    "dataset": "camargo",
+    "dataset_version": "10_20_dense_8cls_yxz",
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
 
     # foundation BERT that produced the separated-head training embeddings
-    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_merged_9cls/limu_bert_x_dapt_seed3431.pt"),
+    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls/limu_bert_x_dapt_5e-4_ep3200_seed3431.pt"),
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
-    "npy_version": "10_20_both_negy_xz",
+    "npy_version": "10_20_both_xyz",
 
     "batch_size": 128,
 }
@@ -131,7 +131,7 @@ def predict_bert(norm, ck, bert_cfg, classifier_cfg, label_num, bs, device):
 
 
 def foundation_embeddings(norm, bert_cfg, foundation_ckpt, bs, device):
-    """Run the frozen foundation transformer -> (N, seq_len, hidden) embeddings."""
+    """Run the finetune-high-lr foundation transformer -> (N, seq_len, hidden) embeddings."""
     bert = LIMUBertModel4Pretrain(bert_cfg, output_embed=True)
     bert.load_state_dict(torch.load(foundation_ckpt, map_location=device))
     bert = bert.to(device).eval()
@@ -212,7 +212,8 @@ def main():
     print(f"jetson    : {cfg['npy_dir']}/data_{cfg['npy_version']}.npy  "
           f"({gt_model.size} scorable / {gt_jetson.size} total, dropped {dropped})")
     print(f"Model cls : {label_names}")
-    jetson_present = sorted({id_to_name[int(j)] for j in gt_jetson})
+    present = {id_to_name[int(j)] for j in gt_jetson}
+    jetson_present = [n for n in label_names if n in present]
     print(f"jetson cls: {jetson_present}")
     print(f"Foundation: {cfg['foundation_ckpt']}")
     print(f"Config    : seq_len {seq_len} | dim {feature_count} | hidden {bert_cfg.hidden} | device {device}")
@@ -236,7 +237,7 @@ def main():
     s = print_family("LIMU-BERT-X + GRU (finetune)", rows)
     if s: summary.append(("finetune", s))
 
-    # 3. frozen  (BERTClassifier, same load path)
+    # 3. frozen (BERTClassifier, same load path)
     rows = []
     for ck in sorted(bert_dir.glob("*_frozen__*.pt")):
         preds = predict_bert(norm, ck, bert_cfg, classifier_cfg, label_num, bs, device)
@@ -244,7 +245,15 @@ def main():
     s = print_family("LIMU-BERT-X + GRU (frozen)", rows)
     if s: summary.append(("frozen", s))
 
-    # 4. separated  (foundation embeddings -> standalone head)
+    # 4. finetune-high-lr  (BERTClassifier, same load path)
+    rows = []
+    for ck in sorted(bert_dir.glob("*_finetune-high-lr__*.pt")):
+        preds = predict_bert(norm, ck, bert_cfg, classifier_cfg, label_num, bs, device)
+        rows.append((ck.name, *score(preds, gt_model, label_num)))
+    s = print_family("LIMU-BERT-X + GRU (finetune-high-lr)", rows)
+    if s: summary.append(("finetune-high-lr", s))
+
+    # 5. separated  (foundation embeddings -> standalone head)
     rows = []
     sep_ckpts = sorted(sep_dir.glob("*_separated__*.pt"))
     if sep_ckpts:
