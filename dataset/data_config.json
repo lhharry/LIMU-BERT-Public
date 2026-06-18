@@ -132,6 +132,22 @@
     "size": 21371
     },
 
+    "camargo_10_20_dense_8cls_yxz": {
+    "sr": 10,
+    "seq_len": 20,
+    "dimension": 6,
+    "activity_label_index": 0,
+    "activity_label_size": 8,
+    "activity_label": ["stand", "walk", "turn", "jog",
+                  "rampascent", "rampdescent",
+                  "stairascent", "stairdescent"],
+    "user_label_index": 1,
+    "user_label_size": 24,
+    "model_label_index": -1,
+    "model_label_size": 0,
+    "size": 21371
+    },
+
     "scherpereel_10_20_dense_9cls": {
         "sr": 10,
         "seq_len": 20,
@@ -354,6 +370,27 @@
         "model_label_index": -1,
         "model_label_size": 0,
         "size": 700
+    },
+        "jetson_leg_10_20_both_xyz_pocket": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 7,
+        "activity_label": [
+            "stand",
+            "walk",
+            "turn",
+            "jog",
+            "rampascent",
+            "stairascent",
+            "stairdescent"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 1,
+        "model_label_index": -1,
+        "model_label_size": 0,
+        "size": 648
     }
 
 }
