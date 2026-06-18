@@ -38,8 +38,8 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 #   bert:        base_gru, base_cnn, base_attn, base_lstm
 # ---------------------------------------------------------------------------
 
-DATASET = "camargo"
-DATASET_VERSION = "10_20_dense_8cls"
+DATASET = "jetson_leg"
+DATASET_VERSION = "10_20_both_xyz"
 MODEL_VERSION = "v3"
 TRAINING_RATE = 0.8
 SEEDS = [3431, 42, 2026]
@@ -77,6 +77,10 @@ RUNS = [
     {"tag": "LIMU-BERT-X+GRU (finetune)",
      "mode": "bert", "method": "base_gru", "model_version": "v3_v3",
      "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0},
+    # Same finetune path, but effective lr = 1e-4 * lr_scale = 1e-3.
+    {"tag": "LIMU-BERT-X+GRU (finetune-high-lr)",
+     "mode": "bert", "method": "base_gru", "model_version": "v3_v3",
+     "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0, "lr_scale": 10},
     # Separated mode: BERT runs in eval/no_grad as a frozen feature extractor
     # (same as inference/test_csv.py), embeddings are cached in memory, then a
     # standalone GRU head is trained via classifier.classify_embeddings.
@@ -124,6 +128,8 @@ def run_one(run_cfg, label_rate, seed, gpu=None, dry=False):
         cmd += ["--cosine_eta_min", str(run_cfg["cosine_eta_min"])]
     if "early_stop_patience" in run_cfg:
         cmd += ["--early_stop_patience", str(run_cfg["early_stop_patience"])]
+    if "lr_scale" in run_cfg:
+        cmd += ["--lr_scale", str(run_cfg["lr_scale"])]
     if gpu is not None:
         cmd += ["--gpu", gpu]
 

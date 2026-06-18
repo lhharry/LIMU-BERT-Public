@@ -55,6 +55,8 @@ def main():
                    help="Absolute floor LR for cosine decay (used when --cosine_decay=1).")
     p.add_argument("--early_stop_patience", type=int, default=15,
                    help="Eval epochs without vali F1 improvement before stopping.")
+    p.add_argument("--lr_scale", type=float, default=1.0,
+                   help="Multiplier applied to train_cfg.lr (effective lr = train_cfg.lr * lr_scale).")
     p.add_argument("--split", choices=["random", "group"], default="random",
                    help="random = legacy window shuffle; group = subject-grouped CV fold.")
     p.add_argument("--group_label_index", type=int, default=1,
@@ -112,6 +114,7 @@ def main():
     try:
         recipe = Recipe(
             early_stop_patience=args_local.early_stop_patience,
+            lr_scale=args_local.lr_scale,
             warmup_epochs=args_local.warmup_epochs,
             cosine_decay=bool(args_local.cosine_decay),
             cosine_eta_min=args_local.cosine_eta_min,
