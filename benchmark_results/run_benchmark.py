@@ -43,7 +43,7 @@ DATASET_VERSION = "10_20_both_xyz"
 MODEL_VERSION = "v3"
 TRAINING_RATE = 0.8
 SEEDS = [3431, 42, 2026]
-LABEL_RATES = [0.002 , 0.005, 0.01, 0.02, 0.05, 0.1]
+LABEL_RATES = [0.002 , 0.005, 0.01, 0.02, 0.05, 0.1, 1.0]
 
 # Which label column to predict. 0 = activity for camargo (see
 # dataset/data_config.json:86). Do NOT use -1 here: in some configs that index
@@ -53,7 +53,7 @@ LABEL_INDEX = 0
 # Path to the LIMU-BERT-X foundation-model checkpoint to use.
 # Adjust if you want a different pretrained file.
 LIMU_BERTX_CKPT = os.path.join(
-    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x.pt"
+    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x_dapt.pt"
 )
 
 # model_version convention:

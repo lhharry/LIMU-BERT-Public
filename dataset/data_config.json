@@ -312,7 +312,7 @@
         "size": 24552
     },
 
-    "merged_10_20_merged_9cls": {
+    "merged_10_20_9cls": {
         "sr": 10,
         "seq_len": 20,
         "dimension": 6,
@@ -334,7 +334,7 @@
         "size": 57927
     },
 
-    "jetson_leg_10_20_both_negy_xz": {
+    "jetson_leg_10_20_both_xyz": {
         "sr": 10,
         "seq_len": 20,
         "dimension": 6,
