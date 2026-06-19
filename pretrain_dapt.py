@@ -20,6 +20,9 @@ Usage (run on the server, alongside pretrain.py):
   python pretrain_dapt.py v3 camargo 10_20_dense_8cls \
       -f saved/bertx/limu_bert_x \
       --seeds 3431,42,2026 --dapt_epochs 200 --dapt_lr 1e-4 -g 0
+  python pretrain_dapt.py v3 merged 10_20_9cls_align \
+      -f saved/bertx/limu_bert_x \
+      --seeds 3431 --dapt_epochs 3200 --dapt_lr 1e-4 -g 0 --out_name limu_bert_x_align_dapt_1e-4_3200
 
 Output: saved/pretrain_base_<dataset>_<version>/<out_name>_seed<seed>.pt
 """
@@ -53,7 +56,7 @@ def parse_args():
                    choices=["hhar", "motion", "uci", "shoaib", "camargo", "merged"])
     p.add_argument("dataset_version", type=str,
                    choices=["10_100", "20_120", "10_20", "10_60", "10_20_dense",
-                            "10_20_dense_8cls", "10_20_merged_9cls"])
+                            "10_20_dense_8cls", "10_20_9cls_align"])
     p.add_argument("-f", "--model_file", type=str, required=True,
                    help="Starting checkpoint to continue from, e.g. saved/bertx/limu_bert_x "
                         "(a trailing .pt is optional).")
