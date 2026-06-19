@@ -75,6 +75,10 @@ def parse_args():
                         "catastrophic forgetting of the foundation model).")
     p.add_argument("--out_name", type=str, default="limu_bert_x_dapt",
                    help="Output ckpt name stem; final file is <out_name>_seed<seed>.pt.")
+    p.add_argument("--num_workers", type=int, default=0,
+                   help="DataLoader worker processes for the train/vali loaders.")
+    p.add_argument("--batch_size", type=int, default=None,
+                   help="Override the train_cfg batch size for the train/vali loaders.")
     return p.parse_args()
 
 
@@ -99,6 +103,8 @@ def build_io(args):
 def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
     # TrainConfig is a NamedTuple -> _replace gives an overridden copy.
     train_cfg = base_train_cfg._replace(seed=seed, lr=args.dapt_lr, n_epochs=args.dapt_epochs)
+    if args.batch_size is not None:
+        train_cfg = train_cfg._replace(batch_size=args.batch_size)
 
     set_seeds(seed)
     data = np.load(args.data_path).astype(np.float32)
@@ -110,9 +116,11 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
 
     pipeline = [Preprocess4Normalization(args.model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     loader_train = DataLoader(LIBERTDataset4Pretrain(data_train, pipeline=pipeline),
-                              shuffle=True, batch_size=train_cfg.batch_size)
+                              shuffle=True, batch_size=train_cfg.batch_size,
+                              num_workers=args.num_workers)
     loader_vali = DataLoader(LIBERTDataset4Pretrain(data_vali, pipeline=pipeline),
-                             shuffle=False, batch_size=train_cfg.batch_size)
+                             shuffle=False, batch_size=train_cfg.batch_size,
+                             num_workers=args.num_workers)
 
     model = LIMUBertModel4Pretrain(args.model_cfg)
     criterion = nn.MSELoss(reduction="none")
@@ -132,9 +140,9 @@ def pretrain_one_seed(args, base_train_cfg, mask_cfg, seed, save_dir, device):
     def func_evaluate(seqs, predict_seqs):
         return criterion(predict_seqs, seqs).mean().cpu().numpy()
 
-    print("\n=== DAPT seed=%d | train=%d vali=%d | start=%s | lr=%g epochs=%d ==="
+    print("\n=== DAPT seed=%d | train=%d vali=%d | start=%s | lr=%g epochs=%d batch=%d workers=%d ==="
           % (seed, data_train.shape[0], data_vali.shape[0], args.pretrain_model,
-             train_cfg.lr, train_cfg.n_epochs))
+             train_cfg.lr, train_cfg.n_epochs, train_cfg.batch_size, args.num_workers))
     print("    mask_cfg(%s): ratio=%g alpha=%g max_gram=%g prob=%g replace=%g"
           % (args.mask_cfg, mask_cfg.mask_ratio, mask_cfg.mask_alpha,
              mask_cfg.max_gram, mask_cfg.mask_prob, mask_cfg.replace_prob))
