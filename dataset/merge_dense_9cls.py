@@ -77,15 +77,15 @@ RAW_ID2NAME = {
 
 # (raw_map_key, dataset_dir, file_version)  ->  file = dataset/<dir>/data_<version>.npy
 SOURCES = [
-    ("camargo",         "camargo",         "10_20_dense_8cls"),
-    ("scherpereel",     "scherpereel",     "10_20_both_dense_9cls"),
-    ("scherpereel_exo", "scherpereel_exo", "10_20_both_dense_9cls"),
-    ("molinaro",        "molinaro",        "10_20_both_dense_7cls"),
+    ("camargo",         "camargo",         "10_20_dense_8cls_zxy"),
+    ("scherpereel",     "scherpereel",     "10_20_both_dense_9cls_-xy-z"),
+    ("scherpereel_exo", "scherpereel_exo", "10_20_both_dense_9cls_-z-y-x"),
+    ("molinaro",        "molinaro",        "10_20_both_dense_7cls_-y-x-z"),
 ]
 
 OUT_DIR = os.path.join(ROOT, "dataset", "merged")
-OUT_VERSION = "10_20_merged_9cls"          # -> data_10_20_merged_9cls.npy / label_...
-OUT_KEY = "merged_10_20_merged_9cls"       # data_config.json key (dataset="merged" + version)
+OUT_VERSION = "10_20_9cls_align"          # -> data_10_20_merged_9cls.npy / label_...
+OUT_KEY = "merged_10_20_9cls_align"       # data_config.json key (dataset="merged" + version)
 
 
 def build_remap(raw_key, present_ids):

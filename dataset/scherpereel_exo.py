@@ -24,10 +24,14 @@ N_SUBJECTS = 17   # BT01-BT17
 
 DATASET_PATH = r'D:\01_Code\DATA\OpenSource\03_MonilaroScherpereel\Phase1And2_Parsed'
 
-LEFT_ACCEL  = ['thigh_imu_l_accel_x', 'thigh_imu_l_accel_y', 'thigh_imu_l_accel_z']
-LEFT_GYRO   = ['thigh_imu_l_gyro_x',  'thigh_imu_l_gyro_y',  'thigh_imu_l_gyro_z']
-RIGHT_ACCEL = ['thigh_imu_r_accel_x', 'thigh_imu_r_accel_y', 'thigh_imu_r_accel_z']
-RIGHT_GYRO  = ['thigh_imu_r_gyro_x',  'thigh_imu_r_gyro_y',  'thigh_imu_r_gyro_z']
+# Axis alignment to the jetson-leg frame (col0=ML, col1=vertical(-g), col2=forward).
+# The 03 exoskeleton thigh IMU has its OWN convention (different from 02_scherpereel):
+# native vertical=Y, ML=Z, forward=X -> output order [Z, Y, X]. Combined with the
+# all-axis negation below, the signed permutation has det +1 (proper rotation).
+LEFT_ACCEL  = ['thigh_imu_l_accel_z', 'thigh_imu_l_accel_y', 'thigh_imu_l_accel_x']
+LEFT_GYRO   = ['thigh_imu_l_gyro_z',  'thigh_imu_l_gyro_y',  'thigh_imu_l_gyro_x']
+RIGHT_ACCEL = ['thigh_imu_r_accel_z', 'thigh_imu_r_accel_y', 'thigh_imu_r_accel_x']
+RIGHT_GYRO  = ['thigh_imu_r_gyro_z',  'thigh_imu_r_gyro_y',  'thigh_imu_r_gyro_x']
 
 # leg -> list of (sensor_cols, activity_flag column). Mirrors scherpereel.py:
 # each trial ships an <name>_activity_flag.csv (time,left,right) row-aligned to
@@ -194,6 +198,10 @@ def preprocess(path, path_save, version, leg, raw_sr=RAW_SR, target_sr=TARGET_SR
     data_list, label_list = load_sensor_data(
         path, label_map, seq_len, raw_sr, target_sr, leg)
     data  = np.concatenate(data_list,  0).astype(np.float32)
+    # signed-perm diag(-1,-1,-1): negate ALL three axes of BOTH accel and gyro
+    # (det stays +1). The previous `data[:, :, 1] *= -1` only negated the accel
+    # vertical axis and left the gyro in a different frame.
+    data *= -1
     label = np.concatenate(label_list, 0).astype(np.float32)
 
     ids, counts = np.unique(label[:, 0, 0].astype(int), return_counts=True)
@@ -225,7 +233,7 @@ if __name__ == '__main__':
     args = p.parse_args()
 
     suffix  = '' if args.leg == 'left' else f'_{args.leg}'
-    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_9cls'
+    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_9cls_-z-y-x'
 
     preprocess(DATASET_PATH, 'dataset/scherpereel_exo', version, args.leg,
                target_sr=args.tgt_sr, seq_len=args.seq_len)

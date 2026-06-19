@@ -56,8 +56,13 @@ RAW_TO_DENSE = {
     "stairdescent-walk":  "walk",
 }
 
-SENSOR_COLS = ['thigh_Accel_Y', 'thigh_Accel_X', 'thigh_Accel_Z',
-               'thigh_Gyro_Y', 'thigh_Gyro_X', 'thigh_Gyro_Z']
+# Axis alignment to the jetson-leg frame (col0=ML, col1=vertical(-g), col2=forward).
+# Camargo native thigh: vertical=X, ML=Z, forward=Y -> output order [Z, X, Y].
+# This 3-cycle permutation has det +1 (a proper rotation, NOT the det -1 reflection
+# that a plain X<->Y swap would give). Output col0/col2 are then negated (see below)
+# so the signed gait invariants (A,B,C) match jetson-leg.
+SENSOR_COLS = ['thigh_Accel_Z', 'thigh_Accel_X', 'thigh_Accel_Y',
+               'thigh_Gyro_Z',  'thigh_Gyro_X',  'thigh_Gyro_Y']
 
 
 def label_activity(name):
@@ -117,8 +122,10 @@ def load_sensor_data(path, seq_len, raw_sr, target_sr):
                 path_exp = os.path.join(path_sub, name)
                 df = pd.read_csv(path_exp)
                 sensor = df[SENSOR_COLS].values.astype(float)
-                sensor[:, :3] *= 9.81  # g → m/s², matching motion.py and uci.py convention
-                sensor
+                sensor[:, :3] *= 9.81  # g → m/s²
+                # Negate output col0 (ML) and col2 (forward) for BOTH accel and
+                # gyro so the frame matches jetson-leg. det stays +1.
+                sensor[:, [0, 2, 3, 5]] *= -1
                 acts_raw = df['Label'].values
 
                 # Remap raw labels (incl. transitions) to dense indices FIRST,
@@ -156,8 +163,8 @@ def preprocess(path, path_save, version, raw_sr=120, target_sr=10, seq_len=120):
     label = np.concatenate(label, 0)
     print('All data processed. Size: %d' % (data.shape[0]))
     os.makedirs(path_save, exist_ok=True)
-    np.save(os.path.join(path_save, 'data_' + version + '_yxz' +'.npy'), np.array(data))
-    np.save(os.path.join(path_save, 'label_' + version + '_yxz' + '.npy'), np.array(label))
+    np.save(os.path.join(path_save, 'data_' + version + '_zxy' +'.npy'), np.array(data))
+    np.save(os.path.join(path_save, 'label_' + version + '_zxy' + '.npy'), np.array(label))
     return data, label
 
 

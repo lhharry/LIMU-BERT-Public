@@ -41,10 +41,10 @@ SEQ_LEN    = 20
 DATASET_PATH = r'D:\01_Code\DATA\OpenSource\04_Monilaro\dataset'
 DEFAULT_MODES = ['LG', 'RA', 'RD', 'SA', 'SD', 'ST']   # exclude TRA/TRB transitions
 
-LEFT_COLS  = ['thigh_accel_x_l', 'thigh_accel_y_l', 'thigh_accel_z_l',
-              'thigh_gyro_x_l',  'thigh_gyro_y_l',  'thigh_gyro_z_l']
-RIGHT_COLS = ['thigh_accel_x_r', 'thigh_accel_y_r', 'thigh_accel_z_r',
-              'thigh_gyro_x_r',  'thigh_gyro_y_r',  'thigh_gyro_z_r']
+LEFT_COLS  = ['thigh_accel_y_l', 'thigh_accel_x_l', 'thigh_accel_z_l',
+              'thigh_gyro_y_l',  'thigh_gyro_x_l',  'thigh_gyro_z_l']
+RIGHT_COLS = ['thigh_accel_y_r', 'thigh_accel_x_r', 'thigh_accel_z_r',
+              'thigh_gyro_y_r',  'thigh_gyro_x_r',  'thigh_gyro_z_r']
 
 LEG_COLS = {
     'left':  [LEFT_COLS],
@@ -175,6 +175,12 @@ def preprocess(path, path_save, version, leg, include_modes,
 
     data_list, label_list = load_sensor_data(trials, act_index, leg, seq_len, raw_sr, target_sr)
     data  = np.concatenate(data_list,  0).astype(np.float32)
+    # Axis alignment to jetson-leg frame. Native thigh: vertical=X, ML=Y, forward=Z;
+    # LEFT/RIGHT_COLS already reorder to [Y, X, Z] (col0=ML, col1=vertical, col2=fwd).
+    # The signed permutation needs diag(-1,-1,-1) on top, i.e. negate ALL three axes
+    # of BOTH accel and gyro (det stays +1). The previous `data[:, :, 1] *= -1` only
+    # negated the accel vertical axis and left the gyro in a different frame.
+    data *= -1
     label = np.concatenate(label_list, 0).astype(np.float32)
 
     ids, counts = np.unique(label[:, 0, 0].astype(int), return_counts=True)
@@ -210,7 +216,7 @@ if __name__ == '__main__':
     args = p.parse_args()
 
     suffix  = '' if args.leg == 'left' else f'_{args.leg}'
-    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_7cls'
+    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_7cls_-y-x-z'
 
     preprocess(args.input_dir, 'dataset/molinaro', version, args.leg, args.include_modes,
                target_sr=args.tgt_sr, seq_len=args.seq_len)

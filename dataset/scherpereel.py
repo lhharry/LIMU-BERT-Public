@@ -186,6 +186,16 @@ def load_sensor_data(path, label_map, seq_len, raw_sr, target_sr, leg):
 
                 seg = seg.copy()
                 seg[:, 3:] *= RAD_PER_DEG  # gyro deg/s -> rad/s
+                # Axis alignment to jetson-leg frame. AThigh native order [X,Y,Z]
+                # already maps to (col0=ML, col1=vertical, col2=forward); negate
+                # col0 and col2 of BOTH accel and gyro so the signed gait invariants
+                # match jetson-leg (det stays +1).
+                # NOTE: the anterior-thigh placement is physically not a pure rotation
+                # of the jetson leg mount, so invariant C (corr of ML-gyro & fwd-accel)
+                # cannot be made to match by any column relabel (best 2/3). We align
+                # the two stronger invariants A and B; the C difference is an
+                # irreducible sensor-placement effect, not a frame bug.
+                seg[:, [0, 2, 3, 5]] *= -1
 
                 seg_down = down_sample(seg, raw_sr, target_sr)
                 n_windows = seg_down.shape[0] // seq_len
@@ -239,7 +249,7 @@ if __name__ == '__main__':
     args = p.parse_args()
 
     suffix  = '' if args.leg == 'left' else f'_{args.leg}'
-    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_9cls'
+    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_dense_9cls_-xy-z'
 
     preprocess(DATASET_PATH, 'dataset/scherpereel', version, args.leg,
                target_sr=args.tgt_sr, seq_len=args.seq_len)
