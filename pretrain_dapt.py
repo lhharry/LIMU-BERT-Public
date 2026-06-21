@@ -21,7 +21,7 @@ Usage (run on the server, alongside pretrain.py):
       -f saved/bertx/limu_bert_x \
       --seeds 3431,42,2026 --dapt_epochs 200 --dapt_lr 1e-4 -g 0
   python pretrain_dapt.py v3 merged 10_20_9cls_align \
-      -f saved/bertx/limu_bert_x \
+      -f saved/bertx/limu_bert_x --num_workers 8 --batch_size 1024 \
       --seeds 3431 --dapt_epochs 3200 --dapt_lr 1e-4 -g 0 --out_name limu_bert_x_align_dapt_1e-4_3200
 
 Output: saved/pretrain_base_<dataset>_<version>/<out_name>_seed<seed>.pt
