@@ -52,23 +52,23 @@ from utils import Preprocess4Normalization
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/bench_run26"),
-    "gru_subdir": "bench_gru_camargo_10_20_dense_8cls_yxz",
-    "bert_subdir": "bert_classifier_base_gru_camargo_10_20_dense_8cls_yxz",
-    "sep_subdir": "classifier_base_gru_camargo_10_20_dense_8cls_yxz",
+    "run_dir": Path("saved/history/bench_run30"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz",
 
     # class space + seq_len / sr / dim
-    "dataset": "camargo",
-    "dataset_version": "10_20_dense_8cls_yxz",
+    "dataset": "jetson_leg",
+    "dataset_version": "10_20_both_xyz",
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
 
     # foundation BERT that produced the separated-head training embeddings
-    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls/limu_bert_x_dapt_5e-4_ep3200_seed3431.pt"),
+    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls_align/limu_bert_x_align_dapt_5e-4_3200_seed3431.pt"),
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
-    "npy_version": "10_20_both_xyz",
+    "npy_version": "10_20_both_xyz", 
 
     "batch_size": 128,
 }
