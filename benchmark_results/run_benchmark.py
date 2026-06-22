@@ -53,7 +53,7 @@ LABEL_INDEX = 0
 # Path to the LIMU-BERT-X foundation-model checkpoint to use.
 # Adjust if you want a different pretrained file.
 LIMU_BERTX_CKPT = os.path.join(
-    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x_align_dapt_1e-3_3200_seed3431.pt"
+    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x_align_dapt_5e-4_3200_seed3431.pt"
 )
 
 # model_version convention:
@@ -66,7 +66,7 @@ RUNS = [
     # --- Supervised baselines (no pretraining) ---
     # {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
     # {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
-    {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
+    # {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
     # --- LIMU-BERT-X foundation model + GRU head ---
     # bert_version pinned to v3 so joint runs match the separated path and
     # inference/test_csv.py. classifier_version swappable (v1 = paper-ish,

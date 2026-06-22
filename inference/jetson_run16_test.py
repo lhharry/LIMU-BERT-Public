@@ -52,14 +52,14 @@ from utils import Preprocess4Normalization
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/bench_run30"),
-    "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz",
-    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz",
-    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz",
+    "run_dir": Path("saved/history/bench_run32"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz_pocket",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
 
     # class space + seq_len / sr / dim
     "dataset": "jetson_leg",
-    "dataset_version": "10_20_both_xyz",
+    "dataset_version": "10_20_both_xyz_pocket",
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
 
