@@ -53,7 +53,7 @@ LABEL_INDEX = 0
 # Path to the LIMU-BERT-X foundation-model checkpoint to use.
 # Adjust if you want a different pretrained file.
 LIMU_BERTX_CKPT = os.path.join(
-    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x_9cls_dapt_1e-3_3200_seed3431.pt"
+    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x_align_dapt_5e-4_3200_seed3431.pt"
 )
 
 # model_version convention:

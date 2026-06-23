@@ -52,7 +52,7 @@ from utils import Preprocess4Normalization
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/bench_run32"),
+    "run_dir": Path("saved/history/bench_run36"),
     "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz_pocket",
     "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
     "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
@@ -64,7 +64,7 @@ CONFIG = {
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
 
     # foundation BERT that produced the separated-head training embeddings
-    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls_align/limu_bert_x_align_dapt_5e-4_3200_seed3431.pt"),
+    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls/limu_bert_x_9cls_dapt_1e-3_3200_seed3431.pt"),
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
