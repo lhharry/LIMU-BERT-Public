@@ -52,14 +52,14 @@ from utils import Preprocess4Normalization
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/bench_run36"),
-    "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz_pocket",
-    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
-    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
+    "run_dir": Path("saved/history/bench_run39"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz",
 
     # class space + seq_len / sr / dim
     "dataset": "jetson_leg",
-    "dataset_version": "10_20_both_xyz_pocket",
+    "dataset_version": "10_20_both_xyz",
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
 
@@ -68,7 +68,7 @@ CONFIG = {
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
-    "npy_version": "10_20_both_xyz", 
+    "npy_version": "10_20_both_xyz_pocket",
 
     "batch_size": 128,
 }
