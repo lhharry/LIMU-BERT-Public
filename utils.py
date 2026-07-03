@@ -271,7 +271,10 @@ def prepare_simple_dataset(data, labels, training_rate=0.2):
     train_num = int(data.shape[0] * training_rate)
     data_train = data[:train_num, ...]
     data_test = data[train_num:, ...]
+    # labels arrive already zero-based from partition_*; a nonzero min means class 0
+    # is absent from this train pool and subtracting would silently shift every label.
     t = np.min(labels)
+    assert t == 0, "prepare_simple_dataset: train pool min label is %s (class 0 missing); refusing to re-shift labels" % t
     label_train = labels[:train_num] - t
     label_test = labels[train_num:] - t
     labels_unique = np.unique(labels)
@@ -298,7 +301,9 @@ def prepare_simple_dataset_balance(data, labels, training_rate=0.8):
         np.random.shuffle(class_index)
         temp = class_index[:train_num]
         index[temp] = True
+    # same contract as prepare_simple_dataset: input labels must already be zero-based
     t = np.min(labels)
+    assert t == 0, "prepare_simple_dataset_balance: train pool min label is %s (class 0 missing); refusing to re-shift labels" % t
     data_train = data[index, ...]
     data_test = data[~index, ...]
     label_train = labels[index, ...] - t

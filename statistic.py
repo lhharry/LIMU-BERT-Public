@@ -16,7 +16,10 @@ def stat_acc_f1(label, results_estimated):
     # label = np.concatenate(label, 0)
     # results_estimated = np.concatenate(results_estimated, 0)
     label_estimated = np.argmax(results_estimated, 1)
-    f1 = f1_score(label, label_estimated, average='macro')
+    # fix the class set to the logits width so macro-F1 always averages over ALL
+    # classes, even ones absent from this (possibly tiny) evaluation split
+    class_set = np.arange(results_estimated.shape[1])
+    f1 = f1_score(label, label_estimated, labels=class_set, average='macro', zero_division=0)
     acc = np.sum(label == label_estimated) / label.size
     return acc, f1
 
@@ -32,9 +35,12 @@ def stat_acc_f1_dual(label, results_estimated):
 
 def stat_results(label, results_estimated):
     label_estimated = np.argmax(results_estimated, 1)
-    f1 = f1_score(label, label_estimated, average='macro')
+    # fixed class set (= logits width) keeps macro-F1 and the confusion-matrix
+    # shape stable across seeds/methods even when a class is missing from test
+    class_set = np.arange(results_estimated.shape[1])
+    f1 = f1_score(label, label_estimated, labels=class_set, average='macro', zero_division=0)
     acc = np.sum(label == label_estimated) / label.size
-    matrix = metrics.confusion_matrix(label, label_estimated) #, normalize='true'
+    matrix = metrics.confusion_matrix(label, label_estimated, labels=class_set) #, normalize='true'
     return acc, matrix, f1
 
 

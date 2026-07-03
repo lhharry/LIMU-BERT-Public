@@ -39,7 +39,7 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 # ---------------------------------------------------------------------------
 
 DATASET = "jetson_leg"
-DATASET_VERSION = "10_20_both_xyz"
+DATASET_VERSION = "10_20_both_xyz_pocket"
 MODEL_VERSION = "v3"
 TRAINING_RATE = 0.8
 SEEDS = [3431, 42, 2026]
@@ -67,7 +67,7 @@ RUNS = [
     # --- Supervised baselines (no pretraining) ---
     # {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
     # {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
-    # {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
+    {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
     # --- LIMU-BERT-X foundation model + GRU head ---
     # bert_version pinned to v3 so joint runs match the separated path and
     # inference/test_csv.py. classifier_version swappable (v1 = paper-ish,

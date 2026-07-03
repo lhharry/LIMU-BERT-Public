@@ -50,30 +50,54 @@ from utils import Preprocess4Normalization
 # -----------------------------------------------------------------------------
 CONFIG = {
     # preprocessed jetson NPY (produced by dataset/jetson_leg.py)
-    "npy_dir": Path("dataset/scherpereel"),  # directory containing data_/label_<version>.npy
-    "npy_version": "10_20_both_dense_9cls",        # data_/label_<version>.npy in npy_dir
+    "npy_dir": Path("dataset/jetson_leg"),  # directory containing data_/label_<version>.npy
+    "npy_version": "10_20_both_xyz_leg_2P",        # data_/label_<version>.npy in npy_dir
 
     # model checkpoint (this fixes seq_len, sr, #features, #classes via its config)
-    "model_path": Path("saved/bert_classifier_base_gru_scherpereel_10_20_both_dense_9cls/limu_gru_v3_dapt_both_scher.pt"),
-    "dataset": "scherpereel",            # defines the model's class space + seq_len/sr/dim
-    "dataset_version": "10_20_both_dense_9cls",
+    "model_path": Path("saved/best/BERTGRU_align_1e-3_Pocket_finetune-high-lr__lr0.2__seed3431_0.804.pt"),
+    "dataset": "jetson_leg",            # defines the model's class space + seq_len/sr/dim
+    "dataset_version": "10_20_both_xyz_leg_2P",
     "bert_version": "v3",
     "classifier_version": "v3",
 
     "batch_size": 128,
+
+    # optional: restrict evaluation to specific subjects, e.g. ["AB02"].
+    # None / [] -> all subjects in the NPY.
+    "subjects": ["AB02"],
 }
 
 
 # -----------------------------------------------------------------------------
 # Jetson NPY loading
 # -----------------------------------------------------------------------------
-def load_jetson_npy(npy_dir: Path, version: str):
-    """Return (data (N,seq,6) float32, gt_jetson (N,) int, id_to_name dict)."""
+def load_jetson_npy(npy_dir: Path, version: str, subjects=None, user_label=None):
+    """Return (data (N,seq,6) float32, gt_jetson (N,) int, id_to_name dict).
+
+    subjects: optional list of AB names (e.g. ["AB02"]) to keep. Windows whose
+    user_id (label[:, 0, 1]) maps to a non-listed subject are dropped. The
+    user_id -> AB mapping comes from `user_label` (the version's user_label list
+    in dataset/data_config.json), indexed by user_id.
+    """
     data = np.load(npy_dir / f"data_{version}.npy").astype(np.float32)   # (N,seq,6)
     label = np.load(npy_dir / f"label_{version}.npy")                    # (N,seq,2)
     with open(npy_dir / "label_map.json") as f:
         name_to_id = json.load(f)
     id_to_name = {int(v): k for k, v in name_to_id.items()}
+
+    if subjects:
+        if not user_label:
+            raise ValueError("subjects filter needs user_label (the version's "
+                             "user_label list from data_config.json)")
+        want = {s.upper() for s in subjects}
+        keep_ids = {i for i, name in enumerate(user_label) if name.upper() in want}
+        missing = want - {user_label[i].upper() for i in keep_ids}
+        if missing:
+            raise ValueError(f"subjects {sorted(missing)} not in user_label {user_label}")
+        user_ids = label[:, 0, 1].astype(int)
+        mask = np.isin(user_ids, list(keep_ids))
+        data, label = data[mask], label[mask]
+
     gt_jetson = label[:, 0, 0].astype(int)        # per-window activity id
     return data, gt_jetson, id_to_name
 
@@ -193,10 +217,13 @@ def main():
     model, _ = build_model(device, label_num, cfg["bert_version"],
                            cfg["classifier_version"], Path(cfg["model_path"]))
 
-    data, gt_jetson, id_to_name = load_jetson_npy(Path(cfg["npy_dir"]), cfg["npy_version"])
+    data, gt_jetson, id_to_name = load_jetson_npy(
+        Path(cfg["npy_dir"]), cfg["npy_version"],
+        subjects=cfg.get("subjects"), user_label=dataset_cfg.user_label)
 
+    subj_note = f"  (subjects {cfg['subjects']})" if cfg.get("subjects") else ""
     print(f"Model     : {cfg['model_path']}")
-    print(f"NPY       : {cfg['npy_dir']}/data_{cfg['npy_version']}.npy  ({data.shape[0]} windows)")
+    print(f"NPY       : {cfg['npy_dir']}/data_{cfg['npy_version']}.npy  ({data.shape[0]} windows){subj_note}")
     print(f"Classes   : {label_names}")
     print(f"Config    : seq_len {seq_len} | dim {feature_count} | device {device}")
 

@@ -106,6 +106,7 @@ class DatasetConfig(NamedTuple):
 
     user_label_index: int = -1  # index of user label
     user_label_size: int = 0  # number of user label
+    user_label: list = []  # names of user label (e.g. subject ids).
 
     position_label_index: int = -1  # index of phone position label
     position_label_size: int = 0  # number of position label

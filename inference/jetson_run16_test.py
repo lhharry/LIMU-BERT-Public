@@ -32,8 +32,17 @@ id. rampdescent / sit-stand-transition get zero support but the model may still
 All four families consume the same per-window Preprocess4Normalization(6) of the
 raw camargo-axis (*_xyz) jetson windows, so we normalize once and reuse it.
 Edit the CONFIG dict to point at a different jetson version / foundation ckpt.
+
+LEAKAGE GUARD: when npy_version is the SAME version the checkpoints were trained
+on (detected from the subdir names), most of these windows were in each model's
+training set, so scoring the full npy would inflate the memorizing baselines.
+In that case each checkpoint is scored ONLY on its own seed's held-out test
+split, reconstructed exactly like the benchmark's partition (see
+bench_test_indices). When npy_version differs (true cross-version eval on
+unseen data), the full npy is scored as before.
 '''
 
+import re
 import sys
 import json
 from pathlib import Path
@@ -46,16 +55,16 @@ from sklearn.metrics import f1_score
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from config import load_dataset_label_names, load_dataset_stats, load_model_config
 from models import fetch_classifier, BERTClassifier, LIMUBertModel4Pretrain
-from utils import Preprocess4Normalization
+from utils import Preprocess4Normalization, set_seeds
 
 # -----------------------------------------------------------------------------
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/bench_run39"),
-    "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz",
-    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz",
-    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz",
+    "run_dir": Path("saved/history/bench_run42"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz_pocket",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
 
     # class space + seq_len / sr / dim
     "dataset": "jetson_leg",
@@ -64,11 +73,16 @@ CONFIG = {
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
 
     # foundation BERT that produced the separated-head training embeddings
-    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls/limu_bert_x_9cls_dapt_1e-3_3200_seed3431.pt"),
+    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls/limu_bert_x_9cls_dapt_5e-4_3200_seed3431.pt"),
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
     "npy_version": "10_20_both_xyz_pocket",
+
+    # split geometry used by the benchmark run that produced the checkpoints;
+    # needed to reconstruct each seed's held-out test split (leakage guard)
+    "training_rate": 0.8,
+    "vali_rate": 0.1,
 
     "batch_size": 128,
 }
@@ -84,7 +98,28 @@ def load_jetson_npy(npy_dir: Path, version: str):
         name_to_id = json.load(f)
     id_to_name = {int(v): k for k, v in name_to_id.items()}
     gt_jetson = label[:, 0, 0].astype(int)
-    return data, gt_jetson, id_to_name
+    return data, gt_jetson, id_to_name, label
+
+
+def bench_test_indices(label_raw, seed, training_rate, vali_rate):
+    """Reconstruct the benchmark's held-out test split on the training npy.
+
+    Mirrors utils.prepare_classifier_dataset -> partition_and_reshape exactly:
+    set_seeds(seed) is immediately followed by ONE np.random.shuffle over the
+    window index, and the last (1 - training_rate - vali_rate) fraction is the
+    test split. Windows whose per-frame activity labels are not uniform are
+    dropped, matching merge_dataset(mode='all'). Returns original npy indices.
+    """
+    n = label_raw.shape[0]
+    set_seeds(seed)
+    arr = np.arange(n)
+    np.random.shuffle(arr)
+    train_num = int(n * training_rate)
+    vali_num = int(n * vali_rate)
+    test_idx = arr[train_num + vali_num:]
+    act = label_raw[test_idx, :, 0]
+    uniform = np.all(act == act[:, :1], axis=1)
+    return test_idx[uniform]
 
 
 def remap_gt_by_name(gt_jetson, id_to_name, label_names):
@@ -194,14 +229,37 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    data, gt_jetson, id_to_name = load_jetson_npy(Path(cfg["npy_dir"]), cfg["npy_version"])
+    data, gt_jetson, id_to_name, label_raw = load_jetson_npy(Path(cfg["npy_dir"]), cfg["npy_version"])
     if data.shape[1:] != (seq_len, feature_count):
         raise ValueError(f"jetson window shape {data.shape[1:]} != model "
                          f"(seq_len={seq_len}, dim={feature_count})")
     gt_model, keep = remap_gt_by_name(gt_jetson, id_to_name, label_names)
     dropped = int((~keep).sum())
+    orig_idx = np.nonzero(keep)[0]
     data, gt_model = data[keep], gt_model[keep]
     norm = normalize_windows(data, feature_count)
+
+    # Leakage guard: if the npy is the very version the checkpoints trained on,
+    # ~80% of these windows sat in each model's training set. Restrict scoring
+    # to the per-seed held-out test split in that case.
+    trained_suffix = f"{cfg['dataset']}_{cfg['npy_version']}"
+    mask_mode = cfg["gru_subdir"].endswith(trained_suffix)
+    test_idx_cache = {}
+
+    def eval_selector(ck_name):
+        """Bool selector (over kept windows) = this ckpt's held-out test split; None = score all."""
+        if not mask_mode:
+            return None
+        m = re.search(r"__seed(\d+)", ck_name)
+        if m is None:
+            raise ValueError(f"cannot parse seed from checkpoint name: {ck_name}")
+        seed = int(m.group(1))
+        if seed not in test_idx_cache:
+            test_idx_cache[seed] = bench_test_indices(
+                label_raw, seed, cfg["training_rate"], cfg["vali_rate"])
+            n_test = int(np.isin(orig_idx, test_idx_cache[seed]).sum())
+            print(f"[mask] seed {seed}: scoring {n_test} held-out test / {orig_idx.size} kept windows")
+        return np.isin(orig_idx, test_idx_cache[seed])
 
     run = Path(cfg["run_dir"])
     gru_dir = run / cfg["gru_subdir"]
@@ -217,39 +275,51 @@ def main():
     print(f"jetson cls: {jetson_present}")
     print(f"Foundation: {cfg['foundation_ckpt']}")
     print(f"Config    : seq_len {seq_len} | dim {feature_count} | hidden {bert_cfg.hidden} | device {device}")
+    if mask_mode:
+        print("[mask] npy_version matches the checkpoints' training version -> "
+              "per-seed held-out test scoring (leakage guard ON)")
+    else:
+        print("[mask] npy_version differs from training version -> full-npy scoring (unseen data)")
 
     bs = cfg["batch_size"]
     summary = []
 
+    def masked(arr, sel):
+        return arr if sel is None else arr[sel]
+
     # 1. supervised R-GRU
     rows = []
     for ck in sorted(gru_dir.glob("bench_R-GRU__*.pt")):
-        preds = predict_supervised(norm, ck, classifier_cfg, label_num, bs, device)
-        rows.append((ck.name, *score(preds, gt_model, label_num)))
+        sel = eval_selector(ck.name)
+        preds = predict_supervised(masked(norm, sel), ck, classifier_cfg, label_num, bs, device)
+        rows.append((ck.name, *score(preds, masked(gt_model, sel), label_num)))
     s = print_family("R-GRU (supervised, no BERT)", rows)
     if s: summary.append(("R-GRU", s))
 
     # 2. finetune  (BERTClassifier)
     rows = []
     for ck in sorted(bert_dir.glob("*_finetune__*.pt")):
-        preds = predict_bert(norm, ck, bert_cfg, classifier_cfg, label_num, bs, device)
-        rows.append((ck.name, *score(preds, gt_model, label_num)))
+        sel = eval_selector(ck.name)
+        preds = predict_bert(masked(norm, sel), ck, bert_cfg, classifier_cfg, label_num, bs, device)
+        rows.append((ck.name, *score(preds, masked(gt_model, sel), label_num)))
     s = print_family("LIMU-BERT-X + GRU (finetune)", rows)
     if s: summary.append(("finetune", s))
 
     # 3. frozen (BERTClassifier, same load path)
     rows = []
     for ck in sorted(bert_dir.glob("*_frozen__*.pt")):
-        preds = predict_bert(norm, ck, bert_cfg, classifier_cfg, label_num, bs, device)
-        rows.append((ck.name, *score(preds, gt_model, label_num)))
+        sel = eval_selector(ck.name)
+        preds = predict_bert(masked(norm, sel), ck, bert_cfg, classifier_cfg, label_num, bs, device)
+        rows.append((ck.name, *score(preds, masked(gt_model, sel), label_num)))
     s = print_family("LIMU-BERT-X + GRU (frozen)", rows)
     if s: summary.append(("frozen", s))
 
     # 4. finetune-high-lr  (BERTClassifier, same load path)
     rows = []
     for ck in sorted(bert_dir.glob("*_finetune-high-lr__*.pt")):
-        preds = predict_bert(norm, ck, bert_cfg, classifier_cfg, label_num, bs, device)
-        rows.append((ck.name, *score(preds, gt_model, label_num)))
+        sel = eval_selector(ck.name)
+        preds = predict_bert(masked(norm, sel), ck, bert_cfg, classifier_cfg, label_num, bs, device)
+        rows.append((ck.name, *score(preds, masked(gt_model, sel), label_num)))
     s = print_family("LIMU-BERT-X + GRU (finetune-high-lr)", rows)
     if s: summary.append(("finetune-high-lr", s))
 
@@ -259,8 +329,10 @@ def main():
     if sep_ckpts:
         embeddings = foundation_embeddings(norm, bert_cfg, Path(cfg["foundation_ckpt"]), bs, device)
         for ck in sep_ckpts:
-            preds = predict_separated(embeddings, ck, classifier_cfg, bert_cfg, label_num, bs, device)
-            rows.append((ck.name, *score(preds, gt_model, label_num)))
+            sel = eval_selector(ck.name)
+            emb = embeddings if sel is None else embeddings[torch.as_tensor(np.nonzero(sel)[0], dtype=torch.long)]
+            preds = predict_separated(emb, ck, classifier_cfg, bert_cfg, label_num, bs, device)
+            rows.append((ck.name, *score(preds, masked(gt_model, sel), label_num)))
     s = print_family("LIMU-BERT-X + GRU (separated)", rows)
     if s: summary.append(("separated", s))
 
