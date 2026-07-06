@@ -61,14 +61,14 @@ from utils import Preprocess4Normalization, set_seeds
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/bench_run42"),
-    "gru_subdir": "bench_gru_jetson_leg_10_20_both_xyz_pocket",
-    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
-    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_xyz_pocket",
+    "run_dir": Path("saved/history/bench_run50"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_02_xyz_leg",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_02_xyz_leg",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_02_xyz_leg",
 
     # class space + seq_len / sr / dim
     "dataset": "jetson_leg",
-    "dataset_version": "10_20_both_xyz",
+    "dataset_version": "10_20_both_02_xyz_pocket",
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
 
@@ -77,7 +77,7 @@ CONFIG = {
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
-    "npy_version": "10_20_both_xyz_pocket",
+    "npy_version": "10_20_both_02_xyz_pocket",
 
     # split geometry used by the benchmark run that produced the checkpoints;
     # needed to reconstruct each seed's held-out test split (leakage guard)

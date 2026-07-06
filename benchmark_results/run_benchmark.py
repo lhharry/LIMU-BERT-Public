@@ -21,10 +21,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(HERE)
-LOG_DIR = os.path.join(HERE, "logs")
-RESULT_DIR = os.path.join(HERE, "results")
-os.makedirs(LOG_DIR, exist_ok=True)
-os.makedirs(RESULT_DIR, exist_ok=True)
+# Per-run output dirs (logs/results/plots) and the saved/ checkpoint subfolder are
+# derived from --run_id inside main(); nothing is created at import time.
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +94,11 @@ def run_id(tag, label_rate, seed):
     return f"{safe}__lr{label_rate}__seed{seed}"
 
 
-def run_one(run_cfg, label_rate, seed, gpu=None, dry=False):
+def run_one(run_cfg, label_rate, seed, log_dir, result_dir, save_dir_name,
+            gpu=None, dry=False):
     rid = run_id(run_cfg["tag"], label_rate, seed)
-    log_path = os.path.join(LOG_DIR, rid + ".log")
-    json_path = os.path.join(RESULT_DIR, rid + ".json")
+    log_path = os.path.join(log_dir, rid + ".log")
+    json_path = os.path.join(result_dir, rid + ".json")
 
     cmd = [
         sys.executable, os.path.join(HERE, "bench_eval.py"),
@@ -111,7 +110,8 @@ def run_one(run_cfg, label_rate, seed, gpu=None, dry=False):
         "--label_rate", str(label_rate),
         "--training_rate", str(run_cfg.get("training_rate", TRAINING_RATE)),
         "--seed", str(seed),
-        "--save_model", "bench_" + rid,
+        "--save_model", rid,
+        "--save_dir", save_dir_name,
         "--out_json", json_path,
         "--balance", str(run_cfg.get("balance", 0)),
         "--label_index", str(run_cfg.get("label_index", LABEL_INDEX)),
@@ -186,6 +186,12 @@ def run_one(run_cfg, label_rate, seed, gpu=None, dry=False):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--run_id", required=True,
+                    help="Manual Run ID naming this benchmark (e.g. 'Run51_20260706_test'). "
+                         "Outputs go to benchmark_results/history/<run_id>/{logs,results,plots} "
+                         "and checkpoints to saved/bench_<run_id>/. Must not contain path separators.")
+    ap.add_argument("--no_plot", action="store_true",
+                    help="Skip auto-generating plots at the end of the sweep.")
     ap.add_argument("--gpu", default=None)
     ap.add_argument("--dry", action="store_true", help="Print the commands without running.")
     ap.add_argument("--only", default=None,
@@ -199,6 +205,17 @@ def main():
                          "BERT mode wants <bert_v>_<classifier_v>, e.g. 'v3_v1'.")
     args = ap.parse_args()
 
+    run_id_name = args.run_id.strip()
+    if not run_id_name or os.path.sep in run_id_name or "/" in run_id_name:
+        raise SystemExit(f"--run_id must be a non-empty folder name without path separators, got {args.run_id!r}")
+    run_dir = os.path.join(HERE, "history", run_id_name)
+    log_dir = os.path.join(run_dir, "logs")
+    result_dir = os.path.join(run_dir, "results")
+    plot_dir = os.path.join(run_dir, "plots")
+    for d in (log_dir, result_dir, plot_dir):
+        os.makedirs(d, exist_ok=True)
+    save_dir_name = "bench_" + run_id_name
+
     label_rates = LABEL_RATES if args.label_rates is None else [float(x) for x in args.label_rates.split(",")]
     seeds = SEEDS if args.seeds is None else [int(x) for x in args.seeds.split(",")]
     runs = RUNS
@@ -208,8 +225,11 @@ def main():
     if args.model_version is not None:
         runs = [{**r, "model_version": args.model_version} for r in runs]
 
-    summary_path = os.path.join(RESULT_DIR, "summary.csv")
+    summary_path = os.path.join(result_dir, "summary.csv")
     write_header = not os.path.exists(summary_path)
+    if not write_header:
+        print(f"WARNING: {summary_path} already exists — run_id {run_id_name!r} was used "
+              f"before; new rows will be APPENDED to the existing summary.csv.")
     fieldnames = ["tag", "method", "mode", "pretrain_model", "frozen_bert", "recipe",
                   "dataset", "dataset_version", "label_rate", "seed", "acc", "f1", "status",
                   "log", "json"]
@@ -220,12 +240,21 @@ def main():
         for run_cfg in runs:
             for lr in label_rates:
                 for seed in seeds:
-                    row = run_one(run_cfg, lr, seed, gpu=args.gpu, dry=args.dry)
+                    row = run_one(run_cfg, lr, seed, log_dir, result_dir, save_dir_name,
+                                  gpu=args.gpu, dry=args.dry)
                     if row is None:
                         continue
                     writer.writerow(row)
                     csvf.flush()
     print(f"\nSummary CSV: {summary_path}")
+    print(f"Run dir:     {run_dir}")
+
+    if not args.dry and not args.no_plot:
+        try:
+            subprocess.run([sys.executable, os.path.join(HERE, "plot_benchmark.py"),
+                            "--run_dir", run_dir], check=True)
+        except Exception as e:  # plotting must never fail a completed sweep
+            print(f"WARNING: plot_benchmark.py failed ({e}); results are still in {result_dir}.")
 
 
 if __name__ == "__main__":

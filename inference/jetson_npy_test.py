@@ -51,12 +51,12 @@ from utils import Preprocess4Normalization
 CONFIG = {
     # preprocessed jetson NPY (produced by dataset/jetson_leg.py)
     "npy_dir": Path("dataset/jetson_leg"),  # directory containing data_/label_<version>.npy
-    "npy_version": "10_20_both_xyz_leg_2P",        # data_/label_<version>.npy in npy_dir
+    "npy_version": "10_20_both_02_xyz_leg_AB02",        # data_/label_<version>.npy in npy_dir
 
     # model checkpoint (this fixes seq_len, sr, #features, #classes via its config)
     "model_path": Path("saved/best/BERTGRU_align_1e-3_Pocket_finetune-high-lr__lr0.2__seed3431_0.804.pt"),
     "dataset": "jetson_leg",            # defines the model's class space + seq_len/sr/dim
-    "dataset_version": "10_20_both_xyz_leg_2P",
+    "dataset_version": "10_20_both_02_xyz_leg_AB02",
     "bert_version": "v3",
     "classifier_version": "v3",
 
@@ -64,7 +64,7 @@ CONFIG = {
 
     # optional: restrict evaluation to specific subjects, e.g. ["AB02"].
     # None / [] -> all subjects in the NPY.
-    "subjects": ["AB02"],
+    "subjects": None,
 }
 
 

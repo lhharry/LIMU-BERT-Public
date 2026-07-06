@@ -7,6 +7,7 @@ Read benchmark_results/results/summary.csv and produce:
 
 Aggregates seeds: mean line with std band.
 """
+import argparse
 import csv
 import json
 import os
@@ -19,9 +20,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Defaults preserve the legacy behavior (benchmark_results/{results,plots}).
+# main() overrides these from --run_dir so plots land in a run's own folder.
 RESULT_DIR = os.path.join(HERE, "results")
 PLOT_DIR = os.path.join(HERE, "plots")
-os.makedirs(PLOT_DIR, exist_ok=True)
 
 
 def load_summary():
@@ -109,6 +111,17 @@ def plot_confusion_matrices(rows):
 
 
 def main():
+    global RESULT_DIR, PLOT_DIR
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run_dir", default=None,
+                    help="Run folder to read/write (results from <run_dir>/results, "
+                         "plots to <run_dir>/plots). Defaults to benchmark_results/{results,plots}.")
+    args = ap.parse_args()
+    if args.run_dir:
+        RESULT_DIR = os.path.join(args.run_dir, "results")
+        PLOT_DIR = os.path.join(args.run_dir, "plots")
+    os.makedirs(PLOT_DIR, exist_ok=True)
+
     rows = load_summary()
     plot_curve(rows, "f1", os.path.join(PLOT_DIR, "labelrate_vs_f1.png"), "Macro F1")
     plot_curve(rows, "acc", os.path.join(PLOT_DIR, "labelrate_vs_acc.png"), "Accuracy")

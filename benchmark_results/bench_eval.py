@@ -42,6 +42,11 @@ def main():
     p.add_argument("--pretrain_model", default=None,
                    help="Path to pretrain .pt (only for --mode bert). Accepts relative or absolute.")
     p.add_argument("--save_model", default="bench_tmp")
+    p.add_argument("--save_dir", default=None,
+                   help="Folder name under saved/ to place this run's checkpoint "
+                        "(e.g. 'bench_Run51_...'). When set, the trained model is saved to "
+                        "saved/<save_dir>/<save_model>.pt instead of the per-target folder, so "
+                        "concurrent benchmark runs don't overwrite each other.")
     p.add_argument("--label_index", type=int, default=-1)
     p.add_argument("--gpu", default=None)
     p.add_argument("--balance", type=int, default=0)
@@ -73,6 +78,14 @@ def main():
     args_local = p.parse_args()
 
     os.chdir(REPO_ROOT)
+
+    # When --save_dir is given, all of this run's checkpoints land flat in
+    # saved/<save_dir>/. os.makedirs (unlike config.py's single-level os.mkdir)
+    # creates the folder; the branches below override args.save_path to point here.
+    run_save_dir = None
+    if args_local.save_dir:
+        run_save_dir = os.path.join(REPO_ROOT, "saved", args_local.save_dir)
+        os.makedirs(run_save_dir, exist_ok=True)
 
     base_cfg = "config/bert_classifier_train.json" if args_local.mode == "bert" else "config/train.json"
     with open(base_cfg, "r") as f:
@@ -129,6 +142,8 @@ def main():
         if args_local.mode == "supervised":
             target = "bench_" + args_local.method
             args = handle_argv(target, tmp_basename, args_local.method)
+            if run_save_dir is not None:
+                args.save_path = os.path.join(run_save_dir, args_local.save_model)
             label_test, preds = classify_benchmark(
                 args, args.label_index, args_local.training_rate, args_local.label_rate,
                 balance=bool(args_local.balance), method=args_local.method, recipe=recipe,
@@ -137,6 +152,8 @@ def main():
         elif args_local.mode == "bert":
             target = "bert_classifier_" + args_local.method
             args = handle_argv(target, tmp_basename, args_local.method)
+            if run_save_dir is not None:
+                args.save_path = os.path.join(run_save_dir, args_local.save_model)
             classifier_bert.method = args_local.method  # see note: bert_classify uses free var
             label_test, preds = classifier_bert.bert_classify(
                 args, args.label_index, args_local.training_rate, args_local.label_rate,
@@ -180,6 +197,8 @@ def main():
             if args_local.gpu is not None:
                 sys.argv += ["-g", args_local.gpu]
             cls_args = handle_argv("classifier_base_gru", tmp_basename, "gru")
+            if run_save_dir is not None:
+                cls_args.save_path = os.path.join(run_save_dir, args_local.save_model)
             sys.argv = saved_argv
 
             label_test, preds = cls_module.classify_embeddings(

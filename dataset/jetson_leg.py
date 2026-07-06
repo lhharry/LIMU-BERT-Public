@@ -24,9 +24,12 @@ Conventions (aligned with molinaro.py / camargo_v2.py / jetson_compare.py)
   discovered for that position), so user_label_size = number of subjects.
 * Units already match the camargo/molinaro NPYs (accel m/s^2, gyro rad/s),
   so NO unit conversion.
-* Block-averaging downsample ~63 Hz -> 10 Hz (no anti-alias filter, matching
-  how the foundation model was pretrained). Each contiguous activity segment is
-  downsampled and windowed independently so no window straddles a label change.
+* Block-averaging downsample raw -> 10 Hz (no anti-alias filter, matching how
+  the foundation model was pretrained). The raw rate is auto-detected per trial
+  from the Time column (trials range ~62-100 Hz; AB01 mixes rates across trials),
+  so every trial truly lands at 10 Hz / 2 s windows; pass --raw_sr to override.
+  Each contiguous activity segment is downsampled and windowed independently so
+  no window straddles a label change.
 * --leg left|right|both: each chosen leg becomes its own 6-dim sample stream
   (both -> Left and Right pooled as separate samples; version suffix _both).
 * label shape (N, seq_len, 2) = [activity_id, user_id].
@@ -46,8 +49,14 @@ import json
 import argparse
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
-RAW_SR    = 63    # measured median jetson sampling rate (~62-66 Hz across trials)
+# The jetson trials do NOT share one sampling rate: older trials run ~62-66 Hz
+# while some newer AB01 trials run ~100 Hz, and AB01 even mixes both rates across
+# its own trials. So raw_sr is auto-detected per trial from the Time column (see
+# estimate_sr) instead of being a global constant. RAW_SR below is only a
+# fallback used when detection fails and no --raw_sr override is given.
+RAW_SR    = 100    # fallback sampling rate (Hz) when per-trial detection fails
 TARGET_SR = 10
 SEQ_LEN   = 20
 
@@ -99,6 +108,27 @@ def down_sample(data, raw_sr, target_sr):
     return np.array(result)
 
 
+def estimate_sr(time_strings):
+    """
+    Estimate a trial's sampling rate (Hz) from its Time column, which holds wall
+    clock 'HH:MM:SS.ffffff' strings. Returns 1 / median(positive inter-sample dt),
+    or None if there are fewer than 3 samples or no positive gap (caller falls
+    back to --raw_sr / RAW_SR). Trials are short and within one hour, so midnight
+    wrap is not handled; non-positive diffs are dropped.
+    """
+    secs = []
+    for s in time_strings:
+        t = datetime.strptime(str(s).strip(), "%H:%M:%S.%f")
+        secs.append(t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6)
+    if len(secs) < 3:
+        return None
+    dt = np.diff(secs)
+    dt = dt[dt > 0]
+    if dt.size == 0:
+        return None
+    return 1.0 / float(np.median(dt))
+
+
 def normalize_subject(token):
     """'2' / '02' / 'ab02' / 'AB02' -> 'AB02'. Non-numeric tokens are upper-cased."""
     t = token.strip()
@@ -144,8 +174,9 @@ def discover_trials(root, position, subjects=None):
 
 def load_trial_sides(accel_path, gyro_path, label_path, sides):
     """
-    Return (dense_labels[list], {side: (N,6) float array}) for one trial,
-    truncated to the common length of the three files.
+    Return (dense_labels[list], {side: (N,6) float array}, raw_sr) for one trial,
+    truncated to the common length of the three files. raw_sr is auto-detected
+    from the (truncated) accel Time column, or None if it cannot be estimated.
     """
     acc = pd.read_csv(accel_path)
     gyr = pd.read_csv(gyro_path)
@@ -158,13 +189,15 @@ def load_trial_sides(accel_path, gyro_path, label_path, sides):
         bad = sorted({x for x, d in zip(lab['Label'], dense) if d is None})
         raise ValueError(f'unknown label token(s) {bad} in {label_path}')
 
+    raw_sr = estimate_sr(acc['Time']) if 'Time' in acc.columns else None
+
     sensors = {}
     for side in sides:
         cols = side_cols(side)
         a = acc[cols].to_numpy(dtype=float)
         g = gyr[cols].to_numpy(dtype=float)
         sensors[side] = np.hstack([a, g])     # (N,6): accel xyz, gyro xyz
-    return dense, sensors
+    return dense, sensors, raw_sr
 
 
 def segment_and_window(dense, sensor, seq_len, raw_sr, target_sr):
@@ -191,7 +224,9 @@ def segment_and_window(dense, sensor, seq_len, raw_sr, target_sr):
 
 
 def preprocess(path, path_save, version, leg, position, subjects_filter=None,
-               raw_sr=RAW_SR, target_sr=TARGET_SR, seq_len=SEQ_LEN):
+               raw_sr=None, target_sr=TARGET_SR, seq_len=SEQ_LEN):
+    # raw_sr None -> auto-detect per trial from the Time column; a numeric value
+    # forces that rate for every trial (overriding detection).
     # All subject folders present (unfiltered) -> used for helpful error messages.
     available = sorted(os.path.basename(d) for d in glob.glob(os.path.join(path, 'AB*'))
                        if os.path.isdir(d))
@@ -218,11 +253,21 @@ def preprocess(path, path_save, version, leg, position, subjects_filter=None,
 
     data_all, label_all = [], []
     for subj, folder, accel_path, gyro_path, label_path in trials:
-        dense, sensors = load_trial_sides(accel_path, gyro_path, label_path, sides)
+        dense, sensors, trial_sr = load_trial_sides(accel_path, gyro_path,
+                                                    label_path, sides)
+        # --raw_sr override wins; else per-trial detection; else RAW_SR fallback.
+        if raw_sr is not None:
+            sr = raw_sr
+        elif trial_sr is not None:
+            sr = trial_sr
+        else:
+            sr = RAW_SR
+            print(f'  WARNING: could not detect sr for {folder}; '
+                  f'falling back to {RAW_SR} Hz')
         n_win = 0
         for side in sides:
             data, acts = segment_and_window(dense, sensors[side],
-                                            seq_len, raw_sr, target_sr)
+                                            seq_len, sr, target_sr)
             for d, a in zip(data, acts):
                 lbl = np.zeros((d.shape[0], seq_len, 2))
                 lbl[:, :, 0] = a[:, None]
@@ -230,7 +275,8 @@ def preprocess(path, path_save, version, leg, position, subjects_filter=None,
                 data_all.append(d)
                 label_all.append(lbl)
                 n_win += d.shape[0]
-        print(f'  {subj}/{os.path.basename(folder):28s} -> {n_win} windows')
+        print(f'  {subj}/{os.path.basename(folder):28s} '
+              f'sr={sr:6.2f}Hz -> {n_win} windows')
 
     data  = np.concatenate(data_all, 0).astype(np.float32)
     label = np.concatenate(label_all, 0).astype(np.float32)
@@ -275,19 +321,22 @@ if __name__ == '__main__':
     p.add_argument('--input_dir', default=DATASET_PATH)
     p.add_argument('--leg', choices=['left', 'right', 'both'], default='both')
     p.add_argument('--position', choices=['leg', 'pocket'], default='leg')
-    p.add_argument('--subjects', nargs='+', default='AB02',
+    p.add_argument('--subjects', nargs='+', default=None,
                    help='One or more subjects to include, e.g. --subjects AB02 '
                         'AB03 (also accepts 2 / 02 / ab02). Omit for all subjects.')
     p.add_argument('--tgt_sr', type=int, default=TARGET_SR)
     p.add_argument('--seq_len', type=int, default=SEQ_LEN)
+    p.add_argument('--raw_sr', type=float, default=None,
+                   help='Force this raw sampling rate (Hz) for every trial. '
+                        'Omit to auto-detect per trial from the Time column.')
     args = p.parse_args()
 
     suffix  = '' if args.leg == 'left' else f'_{args.leg}'
     if args.subjects:
         subj_tag = ''.join(normalize_subject(s)[2:] for s in sorted(args.subjects))
         suffix += f'_{subj_tag}'
-    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_xyz_{args.position}_AB02'
+    version = f'{args.tgt_sr}_{args.seq_len}{suffix}_xyz_{args.position}'
 
     preprocess(args.input_dir, 'dataset/jetson_leg', version, args.leg, args.position,
-               subjects_filter=args.subjects,
+               subjects_filter=args.subjects, raw_sr=args.raw_sr,
                target_sr=args.tgt_sr, seq_len=args.seq_len)
