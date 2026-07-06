@@ -65,7 +65,7 @@ RUNS = [
     # --- Supervised baselines (no pretraining) ---
     # {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
     # {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
-    {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
+    # {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
     # --- LIMU-BERT-X foundation model + GRU head ---
     # bert_version pinned to v3 so joint runs match the separated path and
     # inference/test_csv.py. classifier_version swappable (v1 = paper-ish,

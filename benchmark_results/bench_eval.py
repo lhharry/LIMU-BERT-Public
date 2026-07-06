@@ -24,6 +24,19 @@ import embedding
 import classifier as cls_module
 
 
+def _reroot_save_path(args, run_save_dir):
+    """Move args.save_path's per-target folder under run_save_dir/, preserving the
+    <target>_<dataset>_<version>/<save_model> layout that config.create_io_config
+    built. Result: saved/<run_save_dir>/<target>_<dataset>_<version>/<save_model>.pt
+    so each run keeps its own per-target subfolders instead of clobbering the shared
+    top-level saved/ ones."""
+    target_folder = os.path.basename(os.path.dirname(args.save_path))
+    model_name = os.path.basename(args.save_path)
+    new_dir = os.path.join(run_save_dir, target_folder)
+    os.makedirs(new_dir, exist_ok=True)
+    args.save_path = os.path.join(new_dir, model_name)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["supervised", "bert", "bert_separated"], required=True,
@@ -79,9 +92,9 @@ def main():
 
     os.chdir(REPO_ROOT)
 
-    # When --save_dir is given, all of this run's checkpoints land flat in
-    # saved/<save_dir>/. os.makedirs (unlike config.py's single-level os.mkdir)
-    # creates the folder; the branches below override args.save_path to point here.
+    # When --save_dir is given, this run's checkpoints live under saved/<save_dir>/,
+    # keeping their per-target <target>_<dataset>_<version>/ subfolders (see
+    # _reroot_save_path). Concurrent benchmark runs thus never overwrite each other.
     run_save_dir = None
     if args_local.save_dir:
         run_save_dir = os.path.join(REPO_ROOT, "saved", args_local.save_dir)
@@ -143,7 +156,7 @@ def main():
             target = "bench_" + args_local.method
             args = handle_argv(target, tmp_basename, args_local.method)
             if run_save_dir is not None:
-                args.save_path = os.path.join(run_save_dir, args_local.save_model)
+                _reroot_save_path(args, run_save_dir)
             label_test, preds = classify_benchmark(
                 args, args.label_index, args_local.training_rate, args_local.label_rate,
                 balance=bool(args_local.balance), method=args_local.method, recipe=recipe,
@@ -153,7 +166,7 @@ def main():
             target = "bert_classifier_" + args_local.method
             args = handle_argv(target, tmp_basename, args_local.method)
             if run_save_dir is not None:
-                args.save_path = os.path.join(run_save_dir, args_local.save_model)
+                _reroot_save_path(args, run_save_dir)
             classifier_bert.method = args_local.method  # see note: bert_classify uses free var
             label_test, preds = classifier_bert.bert_classify(
                 args, args.label_index, args_local.training_rate, args_local.label_rate,
@@ -198,7 +211,7 @@ def main():
                 sys.argv += ["-g", args_local.gpu]
             cls_args = handle_argv("classifier_base_gru", tmp_basename, "gru")
             if run_save_dir is not None:
-                cls_args.save_path = os.path.join(run_save_dir, args_local.save_model)
+                _reroot_save_path(cls_args, run_save_dir)
             sys.argv = saved_argv
 
             label_test, preds = cls_module.classify_embeddings(
