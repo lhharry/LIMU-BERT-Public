@@ -362,13 +362,37 @@ def prepare_simple_dataset_balance(data, labels, training_rate=0.8):
     return data_train, label_train, data_test, label_test
 
 
+def _allocate_evenly(total, caps, start=0):
+    """Distribute `total` items across len(caps) bins as evenly as possible without
+    exceeding each bin's cap. Round-robins one at a time from `start`, so a remainder
+    (e.g. 7 over 2 bins -> 4,3) lands on the earliest bins, and a capped bin's
+    shortfall is auto-redistributed to the others. Assumes sum(caps) >= total."""
+    n = len(caps)
+    alloc = [0] * n
+    remaining = total
+    while remaining > 0 and any(alloc[i] < caps[i] for i in range(n)):
+        progressed = False
+        for k in range(n):
+            if remaining <= 0:
+                break
+            i = (k + start) % n
+            if alloc[i] < caps[i]:
+                alloc[i] += 1
+                remaining -= 1
+                progressed = True
+        if not progressed:
+            break
+    return alloc
+
+
 def prepare_simple_dataset_balance_grouped(data, labels, groups, training_rate=0.8):
-    """Like prepare_simple_dataset_balance, but balances across SUBJECTS as well as
-    classes: draws an equal number of windows from every (subject x class) cell, so
-    each subject contributes equally to each activity in the labeled pool. `groups`
-    is the per-window subject id aligned to `data`/`labels` (see partition_*'s
-    return_group). Empty (subject, class) cells (a subject that never did an activity)
-    are skipped and do not drag the per-cell count to zero. Same zero-based-label
+    """Like prepare_simple_dataset_balance, but also balances across SUBJECTS. Each
+    class gets the same per-class budget (as in the class-only balancer), and that
+    budget is spread as EVENLY AS POSSIBLE across the subjects present in the class
+    (e.g. a budget of 7 over 2 subjects -> 4 + 3, not 3 + 3). This avoids dropping the
+    remainder and, crucially, never floors a cell to 0 the way a strict per-(subject,
+    class) quota would at small label_rate. `groups` is the per-window subject id
+    aligned to `data`/`labels` (see partition_*'s return_group). Same zero-based-label
     contract as prepare_simple_dataset_balance."""
     labels = labels.astype(int)
     groups = groups.astype(int)
@@ -376,26 +400,24 @@ def prepare_simple_dataset_balance_grouped(data, labels, groups, training_rate=0
     subjects = np.unique(groups)
     n_classes, n_subjects = classes.size, subjects.size
 
-    cells = {}                       # (subject, class) -> flat window indices
-    nonempty_counts = []
-    for s in subjects:
-        for c in classes:
-            idx = np.argwhere((groups == s) & (labels == c)).reshape(-1)
-            cells[(s, c)] = idx
-            if idx.size > 0:
-                nonempty_counts.append(idx.size)
-    n_empty = n_subjects * n_classes - len(nonempty_counts)
-    smallest_cell = min(nonempty_counts) if nonempty_counts else 0
-    per_cell = min(smallest_cell, int(data.shape[0] * training_rate / (n_classes * n_subjects)))
-    if per_cell == smallest_cell and smallest_cell > 0:
-        print("Warning! You are using all windows of the smallest (subject,class) cell.")
+    # per-class budget, capped by the smallest class so every class contributes equally
+    # (identical to prepare_simple_dataset_balance's train_num, i.e. divide by n_classes
+    # ONLY -- not by n_subjects -- so small label_rate still yields >=1 per class).
+    class_totals = [int(np.sum(labels == c)) for c in classes]
+    per_class = min(min(class_totals), int(data.shape[0] * training_rate / n_classes))
+    if per_class == min(class_totals):
+        print("Warning! You are using all windows of the smallest class.")
 
     index = np.zeros(data.shape[0], dtype=bool)
-    for idx in cells.values():
-        if idx.size == 0:
-            continue
-        np.random.shuffle(idx)
-        index[idx[:per_cell]] = True
+    for ci, c in enumerate(classes):
+        cell_idx = [np.argwhere((groups == s) & (labels == c)).reshape(-1) for s in subjects]
+        caps = [ix.size for ix in cell_idx]
+        # rotate the starting subject by class so the remainder doesn't always fall on
+        # the same subject across classes (keeps overall subject counts balanced too).
+        alloc = _allocate_evenly(per_class, caps, start=ci % max(n_subjects, 1))
+        for ix, k in zip(cell_idx, alloc):
+            np.random.shuffle(ix)
+            index[ix[:k]] = True
 
     # same contract as prepare_simple_dataset_balance: input labels already zero-based
     t = np.min(labels)
@@ -405,9 +427,9 @@ def prepare_simple_dataset_balance_grouped(data, labels, groups, training_rate=0
     label_train = labels[index, ...] - t
     label_test = labels[~index, ...] - t
     print('Balance(subject) Label Size: %d, Unlabel Size: %d; subjects=%d classes=%d '
-          'per(subject,class)=%d empty_cells=%d; Real Label Rate: %0.3f'
-          % (label_train.shape[0], label_test.shape[0], n_subjects, n_classes, per_cell,
-             n_empty, label_train.shape[0] * 1.0 / labels.size))
+          'per_class=%d (spread across subjects); Real Label Rate: %0.3f'
+          % (label_train.shape[0], label_test.shape[0], n_subjects, n_classes, per_class,
+             label_train.shape[0] * 1.0 / labels.size))
     return data_train, label_train, data_test, label_test
 
 

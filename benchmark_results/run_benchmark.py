@@ -50,9 +50,10 @@ LABEL_RATES = [0.05, 0.1, 0.3, 0.5, 0.8, 1.0]
 LABEL_INDEX = 0
 
 # Balanced label sampling for the labeled TRAIN pool. When 1, balance=1 means the
-# labeled subsample is balanced by BOTH activity class AND subject (equal windows
-# per subject x class) on multi-subject datasets; single-subject configs fall back
-# to class-only balance automatically (see utils.prepare_classifier_dataset).
+# labeled subsample is balanced by activity class (per-class budget), and that budget
+# is spread as evenly as possible across subjects on multi-subject datasets (e.g. a
+# 7-window class budget over 2 subjects -> 4 + 3). Single-subject configs fall back to
+# class-only balance automatically (see utils.prepare_classifier_dataset).
 # Per-run override: add "balance": 0/1 to a RUNS entry.
 BALANCE = 1
 
