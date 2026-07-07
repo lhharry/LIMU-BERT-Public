@@ -80,7 +80,7 @@ def span_mask(seq_len, max_gram=3, p=0.2, goal_num_predict=15):
     return list(mask_pos)
 
 
-def merge_dataset(data, label, mode='all'):
+def merge_dataset(data, label, mode='all', extra=None):
     index = np.zeros(data.shape[0], dtype=bool)
     label_new = []
     for i in range(label.shape[0]):
@@ -103,6 +103,12 @@ def merge_dataset(data, label, mode='all'):
             index[i] = ~index[i]
             label_new.append(label[i, 0])
     # print('Before Merge: %d, After Merge: %d' % (data.shape[0], np.sum(index)))
+    if extra is not None:
+        # Filter a secondary per-window array (e.g. subject id) by the SAME keep
+        # mask derived from `label`, so it stays aligned to the returned windows.
+        # extra is reshaped like `label` (n_windows, merge); subject is constant
+        # within a kept window, so take column 0.
+        return data[index], np.array(label_new), extra[index, 0]
     return data[index], np.array(label_new)
 
 
@@ -148,20 +154,37 @@ def prepare_classifier_dataset(data, labels, label_index=0, training_rate=0.8, l
                                , split="random", group_label_index=1, fold_id=0, n_folds=5, split_seed=3431):
 
     set_seeds(seed)
+    # When balancing on a multi-subject dataset, also balance across subjects
+    # (equal windows per subject x class). Falls back to class-only balance for
+    # single-subject configs or when the group column coincides with the label.
+    subject_balance = (
+        balance and group_label_index is not None
+        and group_label_index != label_index
+        and group_label_index < labels.shape[2]
+        and np.unique(labels[:, 0, group_label_index]).size > 1
+    )
     if split == "group":
-        data_train, label_train, data_vali, label_vali, data_test, label_test \
-            = partition_grouped_and_reshape(data, labels, label_index=label_index,
-                                            group_label_index=group_label_index, change_shape=change_shape,
-                                            merge=merge, merge_mode=merge_mode,
-                                            fold_id=fold_id, n_folds=n_folds, split_seed=split_seed)
+        parts = partition_grouped_and_reshape(data, labels, label_index=label_index,
+                                              group_label_index=group_label_index, change_shape=change_shape,
+                                              merge=merge, merge_mode=merge_mode,
+                                              fold_id=fold_id, n_folds=n_folds, split_seed=split_seed,
+                                              return_group=subject_balance)
     else:
-        data_train, label_train, data_vali, label_vali, data_test, label_test \
-            = partition_and_reshape(data, labels, label_index=label_index, training_rate=training_rate, vali_rate=0.1
-                                    , change_shape=change_shape, merge=merge, merge_mode=merge_mode)
+        parts = partition_and_reshape(data, labels, label_index=label_index, training_rate=training_rate, vali_rate=0.1
+                                      , change_shape=change_shape, merge=merge, merge_mode=merge_mode
+                                      , group_label_index=group_label_index, return_group=subject_balance)
+    if subject_balance:
+        data_train, label_train, data_vali, label_vali, data_test, label_test, group_train = parts
+    else:
+        data_train, label_train, data_vali, label_vali, data_test, label_test = parts
     set_seeds(seed)
     if balance:
-        data_train_label, label_train_label, _, _ \
-            = prepare_simple_dataset_balance(data_train, label_train, training_rate=label_rate)
+        if subject_balance:
+            data_train_label, label_train_label, _, _ \
+                = prepare_simple_dataset_balance_grouped(data_train, label_train, group_train, training_rate=label_rate)
+        else:
+            data_train_label, label_train_label, _, _ \
+                = prepare_simple_dataset_balance(data_train, label_train, training_rate=label_rate)
     else:
         data_train_label, label_train_label, _, _ \
             = prepare_simple_dataset(data_train, label_train, training_rate=label_rate)
@@ -169,7 +192,8 @@ def prepare_classifier_dataset(data, labels, label_index=0, training_rate=0.8, l
 
 
 def partition_and_reshape(data, labels, label_index=0, training_rate=0.8, vali_rate=0.1, change_shape=True
-                          , merge=0, merge_mode='all', shuffle=True):
+                          , merge=0, merge_mode='all', shuffle=True
+                          , group_label_index=None, return_group=False):
     arr = np.arange(data.shape[0])
     if shuffle:
         np.random.shuffle(arr)
@@ -184,6 +208,10 @@ def partition_and_reshape(data, labels, label_index=0, training_rate=0.8, vali_r
     label_train = labels[:train_num, ..., label_index] - t
     label_vali = labels[train_num:train_num+vali_num, ..., label_index] - t
     label_test = labels[train_num+vali_num:, ..., label_index] - t
+    # Optionally carry the group/subject id for the TRAIN windows through the exact
+    # same reshape+merge so it stays aligned to data_train (used for subject-balanced
+    # sampling). group id is constant within a window.
+    group_train = labels[:train_num, ..., group_label_index] if return_group else None
     if change_shape:
         data_train = reshape_data(data_train, merge)
         data_vali = reshape_data(data_vali, merge)
@@ -191,11 +219,19 @@ def partition_and_reshape(data, labels, label_index=0, training_rate=0.8, vali_r
         label_train = reshape_label(label_train, merge)
         label_vali = reshape_label(label_vali, merge)
         label_test = reshape_label(label_test, merge)
+        if return_group:
+            group_train = reshape_label(group_train, merge)
     if change_shape and merge != 0:
-        data_train, label_train = merge_dataset(data_train, label_train, mode=merge_mode)
+        if return_group:
+            data_train, label_train, group_train = merge_dataset(
+                data_train, label_train, mode=merge_mode, extra=group_train)
+        else:
+            data_train, label_train = merge_dataset(data_train, label_train, mode=merge_mode)
         data_test, label_test = merge_dataset(data_test, label_test, mode=merge_mode)
         data_vali, label_vali = merge_dataset(data_vali, label_vali, mode=merge_mode)
     print('Train Size: %d, Vali Size: %d, Test Size: %d' % (label_train.shape[0], label_vali.shape[0], label_test.shape[0]))
+    if return_group:
+        return data_train, label_train, data_vali, label_vali, data_test, label_test, group_train
     return data_train, label_train, data_vali, label_vali, data_test, label_test
 
 
@@ -227,10 +263,12 @@ def grouped_fold_assignment(groups, fold_id, n_folds, split_seed):
 
 def partition_grouped_and_reshape(data, labels, label_index=0, group_label_index=1,
                                   change_shape=True, merge=0, merge_mode='all',
-                                  fold_id=0, n_folds=5, split_seed=3431):
+                                  fold_id=0, n_folds=5, split_seed=3431,
+                                  return_group=False):
     """Subject-grouped k-fold partition: no group (e.g. subject) appears in more
     than one of train/vali/test. Drop-in shape-compatible with
-    partition_and_reshape (same 6-tuple return), but the split is grouped CV
+    partition_and_reshape (same 6-tuple return, or 7-tuple with the aligned
+    train group ids when return_group=True), but the split is grouped CV
     instead of a random window shuffle. Grouping is read from labels[:, 0,
     group_label_index] (group id is constant within a window)."""
     groups = labels[:, 0, group_label_index].astype(int)
@@ -246,6 +284,9 @@ def partition_grouped_and_reshape(data, labels, label_index=0, group_label_index
     label_train = labels[train_mask, ..., label_index] - t
     label_vali = labels[vali_mask, ..., label_index] - t
     label_test = labels[test_mask, ..., label_index] - t
+    # Carry the subject id for TRAIN windows through the same reshape+merge (see
+    # partition_and_reshape); needed for subject-balanced sampling under grouped CV.
+    group_train = labels[train_mask, ..., group_label_index] if return_group else None
     if change_shape:
         data_train = reshape_data(data_train, merge)
         data_vali = reshape_data(data_vali, merge)
@@ -253,13 +294,21 @@ def partition_grouped_and_reshape(data, labels, label_index=0, group_label_index
         label_train = reshape_label(label_train, merge)
         label_vali = reshape_label(label_vali, merge)
         label_test = reshape_label(label_test, merge)
+        if return_group:
+            group_train = reshape_label(group_train, merge)
     if change_shape and merge != 0:
-        data_train, label_train = merge_dataset(data_train, label_train, mode=merge_mode)
+        if return_group:
+            data_train, label_train, group_train = merge_dataset(
+                data_train, label_train, mode=merge_mode, extra=group_train)
+        else:
+            data_train, label_train = merge_dataset(data_train, label_train, mode=merge_mode)
         data_test, label_test = merge_dataset(data_test, label_test, mode=merge_mode)
         data_vali, label_vali = merge_dataset(data_vali, label_vali, mode=merge_mode)
     print('Grouped CV fold %d/%d (split_seed=%d) | train groups=%s vali=%s test=%s'
           % (fold_id, n_folds, split_seed, sorted(train_groups), sorted(vali_groups), sorted(test_groups)))
     print('Train Size: %d, Vali Size: %d, Test Size: %d' % (label_train.shape[0], label_vali.shape[0], label_test.shape[0]))
+    if return_group:
+        return data_train, label_train, data_vali, label_vali, data_test, label_test, group_train
     return data_train, label_train, data_vali, label_vali, data_test, label_test
 
 
@@ -310,6 +359,55 @@ def prepare_simple_dataset_balance(data, labels, training_rate=0.8):
     label_test = labels[~index, ...] - t
     print('Balance Label Size: %d, Unlabel Size: %d; Real Label Rate: %0.3f' % (label_train.shape[0], label_test.shape[0]
                                                                , label_train.shape[0] * 1.0 / labels.size))
+    return data_train, label_train, data_test, label_test
+
+
+def prepare_simple_dataset_balance_grouped(data, labels, groups, training_rate=0.8):
+    """Like prepare_simple_dataset_balance, but balances across SUBJECTS as well as
+    classes: draws an equal number of windows from every (subject x class) cell, so
+    each subject contributes equally to each activity in the labeled pool. `groups`
+    is the per-window subject id aligned to `data`/`labels` (see partition_*'s
+    return_group). Empty (subject, class) cells (a subject that never did an activity)
+    are skipped and do not drag the per-cell count to zero. Same zero-based-label
+    contract as prepare_simple_dataset_balance."""
+    labels = labels.astype(int)
+    groups = groups.astype(int)
+    classes = np.unique(labels)
+    subjects = np.unique(groups)
+    n_classes, n_subjects = classes.size, subjects.size
+
+    cells = {}                       # (subject, class) -> flat window indices
+    nonempty_counts = []
+    for s in subjects:
+        for c in classes:
+            idx = np.argwhere((groups == s) & (labels == c)).reshape(-1)
+            cells[(s, c)] = idx
+            if idx.size > 0:
+                nonempty_counts.append(idx.size)
+    n_empty = n_subjects * n_classes - len(nonempty_counts)
+    smallest_cell = min(nonempty_counts) if nonempty_counts else 0
+    per_cell = min(smallest_cell, int(data.shape[0] * training_rate / (n_classes * n_subjects)))
+    if per_cell == smallest_cell and smallest_cell > 0:
+        print("Warning! You are using all windows of the smallest (subject,class) cell.")
+
+    index = np.zeros(data.shape[0], dtype=bool)
+    for idx in cells.values():
+        if idx.size == 0:
+            continue
+        np.random.shuffle(idx)
+        index[idx[:per_cell]] = True
+
+    # same contract as prepare_simple_dataset_balance: input labels already zero-based
+    t = np.min(labels)
+    assert t == 0, "prepare_simple_dataset_balance_grouped: train pool min label is %s (class 0 missing); refusing to re-shift labels" % t
+    data_train = data[index, ...]
+    data_test = data[~index, ...]
+    label_train = labels[index, ...] - t
+    label_test = labels[~index, ...] - t
+    print('Balance(subject) Label Size: %d, Unlabel Size: %d; subjects=%d classes=%d '
+          'per(subject,class)=%d empty_cells=%d; Real Label Rate: %0.3f'
+          % (label_train.shape[0], label_test.shape[0], n_subjects, n_classes, per_cell,
+             n_empty, label_train.shape[0] * 1.0 / labels.size))
     return data_train, label_train, data_test, label_test
 
 

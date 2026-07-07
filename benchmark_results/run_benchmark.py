@@ -49,6 +49,13 @@ LABEL_RATES = [0.05, 0.1, 0.3, 0.5, 0.8, 1.0]
 # matches a "_label_index: -1" sentinel and yields label_num=0 → CUDA assert.
 LABEL_INDEX = 0
 
+# Balanced label sampling for the labeled TRAIN pool. When 1, balance=1 means the
+# labeled subsample is balanced by BOTH activity class AND subject (equal windows
+# per subject x class) on multi-subject datasets; single-subject configs fall back
+# to class-only balance automatically (see utils.prepare_classifier_dataset).
+# Per-run override: add "balance": 0/1 to a RUNS entry.
+BALANCE = 1
+
 # Path to the LIMU-BERT-X foundation-model checkpoint to use.
 # Adjust if you want a different pretrained file.
 LIMU_BERTX_CKPT = os.path.join(
@@ -113,7 +120,7 @@ def run_one(run_cfg, label_rate, seed, log_dir, result_dir, save_dir_name,
         "--save_model", rid,
         "--save_dir", save_dir_name,
         "--out_json", json_path,
-        "--balance", str(run_cfg.get("balance", 0)),
+        "--balance", str(run_cfg.get("balance", BALANCE)),
         "--label_index", str(run_cfg.get("label_index", LABEL_INDEX)),
     ]
     if run_cfg.get("pretrain_model"):
