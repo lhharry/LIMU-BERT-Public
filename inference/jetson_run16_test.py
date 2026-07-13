@@ -61,23 +61,25 @@ from utils import Preprocess4Normalization, set_seeds
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/bench_run53"),
-    "gru_subdir": "bench_gru_jetson_leg_10_20_both_01_xyz_leg",
-    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_01_xyz_leg",
-    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_01_xyz_leg",
+    "run_dir": Path("saved/history/bench_run78"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_0203_xyz_leg",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_0203_xyz_leg",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_0203_xyz_leg",
 
     # class space + seq_len / sr / dim
     "dataset": "jetson_leg",
-    "dataset_version": "10_20_both_03_xyz_leg",
+    "dataset_version": "10_20_both_01_xyz_leg",
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
+    "dcnn_version": "v1",                 # dcnn_v1 in config/classifier.json
+    "deepsense_version": "v1",            # deepsense_v1 in config/classifier.json
 
     # foundation BERT that produced the separated-head training embeddings
-    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls_align/limu_bert_x_align_dapt_5e-4_3200_seed3431.pt"),
+    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls/limu_bert_x_9cls_dapt_5e-4_3200_seed3431.pt"),
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
-    "npy_version": "10_20_both_03_xyz_leg",
+    "npy_version": "10_20_both_01_xyz_leg",
 
     # split geometry used by the benchmark run that produced the checkpoints;
     # needed to reconstruct each seed's held-out test split (leakage guard)
@@ -150,8 +152,8 @@ def _argmax_loader(tensor, model, batch_size, device):
     return np.concatenate(preds) if preds else np.empty((0,), dtype=np.int64)
 
 
-def predict_supervised(norm, ck, classifier_cfg, label_num, bs, device):
-    model = fetch_classifier("gru", classifier_cfg, input=classifier_cfg.input, output=label_num)
+def predict_supervised(norm, ck, classifier_cfg, label_num, bs, device, method="gru"):
+    model = fetch_classifier(method, classifier_cfg, input=classifier_cfg.input, output=label_num)
     model.load_state_dict(torch.load(ck, map_location=device))
     model = model.to(device).eval()
     return _argmax_loader(torch.from_numpy(norm), model, bs, device)
@@ -187,6 +189,7 @@ def predict_separated(embeddings, ck, classifier_cfg, bert_cfg, label_num, bs, d
 
 # -----------------------------------------------------------------------------
 # Reporting
+
 # -----------------------------------------------------------------------------
 def score(preds, gt_model, label_num):
     acc = float(np.mean(preds == gt_model))
@@ -225,6 +228,8 @@ def main():
     bert_cfg = load_model_config("pretrain_base", "base", cfg["bert_version"])
     if classifier_cfg is None or bert_cfg is None:
         raise ValueError("Unable to load classifier/bert model config")
+    dcnn_cfg = load_model_config("bench_dcnn", "dcnn", cfg["dcnn_version"])
+    deepsense_cfg = load_model_config("bench_deepsense", "deepsense", cfg["deepsense_version"])
     seq_len, feature_count = dataset_cfg.seq_len, dataset_cfg.dimension
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -296,6 +301,28 @@ def main():
     s = print_family("R-GRU (supervised, no BERT)", rows)
     if s: summary.append(("R-GRU", s))
 
+    # 1b. supervised DCNN
+    if dcnn_cfg is not None:
+        dcnn_dir = run / cfg["gru_subdir"].replace("bench_gru_", "bench_dcnn_", 1)
+        rows = []
+        for ck in sorted(dcnn_dir.glob("DCNN__*.pt")):
+            sel = eval_selector(ck.name)
+            preds = predict_supervised(masked(norm, sel), ck, dcnn_cfg, label_num, bs, device, method="dcnn")
+            rows.append((ck.name, *score(preds, masked(gt_model, sel), label_num)))
+        s = print_family("DCNN (supervised, no BERT)", rows)
+        if s: summary.append(("DCNN", s))
+
+    # 1c. supervised DeepSense
+    if deepsense_cfg is not None:
+        deepsense_dir = run / cfg["gru_subdir"].replace("bench_gru_", "bench_deepsense_", 1)
+        rows = []
+        for ck in sorted(deepsense_dir.glob("DeepSense__*.pt")):
+            sel = eval_selector(ck.name)
+            preds = predict_supervised(masked(norm, sel), ck, deepsense_cfg, label_num, bs, device, method="deepsense")
+            rows.append((ck.name, *score(preds, masked(gt_model, sel), label_num)))
+        s = print_family("DeepSense (supervised, no BERT)", rows)
+        if s: summary.append(("DeepSense", s))
+
     # 2. finetune  (BERTClassifier)
     rows = []
     for ck in sorted(bert_dir.glob("*_finetune__*.pt")):
@@ -341,8 +368,8 @@ def main():
     print("SUMMARY (best checkpoint per family)")
     print(f"{'family':12s} {'best_acc':>9s} {'mean_acc':>9s}   best_ckpt")
     print("-" * 52)
-    for fam, (_, name, best_acc, _f1, mean_acc) in summary:
-        print(f"{fam:12s} {best_acc:9.3f} {mean_acc:9.3f}   {name}")
+    for fam, (_, name, best_acc, best_f1, mean_acc) in summary:  # best_f1 = f1 of the best-acc ckpt
+        print(f"{fam:12s} {best_acc:9.3f} {mean_acc:9.3f}   {name},{best_acc:9.3f} {best_f1:9.3f}  ")
 
 
 if __name__ == "__main__":
