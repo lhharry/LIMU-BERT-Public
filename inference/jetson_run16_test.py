@@ -61,21 +61,21 @@ from utils import Preprocess4Normalization, set_seeds
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/bench_run78"),
-    "gru_subdir": "bench_gru_jetson_leg_10_20_both_0203_xyz_leg",
-    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_0203_xyz_leg",
-    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_0203_xyz_leg",
+    "run_dir": Path("saved/history/bench_04"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_01_xyz_pocket",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_01_xyz_pocket",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_01_xyz_pocket",
 
     # class space + seq_len / sr / dim
     "dataset": "jetson_leg",
-    "dataset_version": "10_20_both_01_xyz_leg",
+    "dataset_version": "10_20_both_01_xyz_leg",  
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
     "dcnn_version": "v1",                 # dcnn_v1 in config/classifier.json
     "deepsense_version": "v1",            # deepsense_v1 in config/classifier.json
 
     # foundation BERT that produced the separated-head training embeddings
-    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls/limu_bert_x_9cls_dapt_5e-4_3200_seed3431.pt"),
+    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls_align/limu_bert_x_align_dapt_5e-4_3200_seed3431.pt"),
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
