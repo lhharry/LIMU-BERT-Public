@@ -36,6 +36,8 @@ Conventions (aligned with molinaro.py / camargo_v2.py / jetson_compare.py)
   windows and never contain transition rows.
 * Position (leg- vs pocket-mounted) is the parent folder, selected with
   --position; one NPY is built per position (mount distributions kept separate).
+  --position both pools leg AND pocket trials into a single NPY (version suffix
+  _both) for mixed-mount training.
 * Subject (AB0x) is written into the label as user_id (0-based over the subjects
   discovered for that position), so user_label_size = number of subjects.
 * Units already match the camargo/molinaro NPYs (accel m/s^2, gyro rad/s),
@@ -53,6 +55,7 @@ Conventions (aligned with molinaro.py / camargo_v2.py / jetson_compare.py)
 Usage (run from the LIMU-BERT-Public repo root):
     python dataset/jetson_leg.py --leg both --position leg
     python dataset/jetson_leg.py --leg both --position pocket
+    python dataset/jetson_leg.py --leg both --position both
     python dataset/jetson_leg.py --leg both --position leg --subjects AB02 AB03
 By default every AB* subject under the position is included; --subjects restricts
 to the listed subjects (a subject tag is appended to the version so subset NPYs
@@ -172,11 +175,13 @@ def discover_trials(root, position, subjects=None):
     """
     Return sorted [(subject, folder, accel_path, gyro_path, label_path)] for every
     trial under root/AB*/<Position>/, where <Position> matches `position`
-    case-insensitively. If `subjects` is given (list of normalised AB tokens),
-    only those subjects are included. Errors if a trial lacks label.csv
-    (run make_labels.py).
+    case-insensitively; position 'both' matches leg AND pocket folders (their
+    trials are pooled into one dataset). If `subjects` is given (list of
+    normalised AB tokens), only those subjects are included. Errors if a trial
+    lacks label.csv (run make_labels.py).
     """
     want = None if not subjects else {normalize_subject(s) for s in subjects}
+    want_pos = {'leg', 'pocket'} if position.lower() == 'both' else {position.lower()}
     out = []
     for subject in sorted(glob.glob(os.path.join(root, 'AB*'))):
         if not os.path.isdir(subject):
@@ -184,9 +189,9 @@ def discover_trials(root, position, subjects=None):
         subj = os.path.basename(subject)
         if want is not None and normalize_subject(subj) not in want:
             continue
-        for pos_dir in glob.glob(os.path.join(subject, '*')):
+        for pos_dir in sorted(glob.glob(os.path.join(subject, '*'))):
             if not (os.path.isdir(pos_dir)
-                    and os.path.basename(pos_dir).lower() == position.lower()):
+                    and os.path.basename(pos_dir).lower() in want_pos):
                 continue
             for dirpath in sorted(glob.glob(os.path.join(pos_dir, '*'))):
                 if not os.path.isdir(dirpath):
@@ -369,7 +374,9 @@ def preprocess(path, path_save, version, leg, position, subjects_filter=None,
         if skipped:
             counts = ', '.join(f'{k}:{v}' for k, v in sorted(skipped.items()))
             skip_note = f'  (skipped {sum(skipped.values())} NaN rows: {counts})'
-        print(f'  {subj}/{os.path.basename(folder):28s} '
+        trial_tag = (f'{os.path.basename(os.path.dirname(folder))}/'
+                     f'{os.path.basename(folder)}')
+        print(f'  {subj}/{trial_tag:35s} '
               f'sr={sr:6.2f}Hz -> {n_win} windows{skip_note}')
 
     data  = np.concatenate(data_all, 0).astype(np.float32)
@@ -427,7 +434,9 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('--input_dir', default=DATASET_PATH)
     p.add_argument('--leg', choices=['left', 'right', 'both'], default='both')
-    p.add_argument('--position', choices=['leg', 'pocket'], default='leg')
+    p.add_argument('--position', choices=['leg', 'pocket', 'both'], default='leg',
+                   help="'both' pools leg AND pocket trials into one NPY "
+                        "(version suffix _both).")
     p.add_argument('--subjects', nargs='+', default=None,
                    help='One or more subjects to include, e.g. --subjects AB02 '
                         'AB03 (also accepts 2 / 02 / ab02). Omit for all subjects.')

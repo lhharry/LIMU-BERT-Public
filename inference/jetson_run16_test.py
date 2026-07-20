@@ -29,8 +29,10 @@ so jetson ground truth is remapped to the model space *by NAME*, never by raw
 id. rampdescent / sit-stand-transition get zero support but the model may still
 (wrongly) predict them, lowering accuracy honestly.
 
-All four families consume the same per-window Preprocess4Normalization(6) of the
-raw camargo-axis (*_xyz) jetson windows, so we normalize once and reuse it.
+All families consume the same per-window Preprocess4Normalization(6) of the raw
+camargo-axis (*_xyz) jetson windows, so we normalize once and reuse it. DeepSense
+is the one exception: benchmark.py trains it on FFTDataset, so it must be fed the
+same fft(n=10) magnitude+phase features here (see fft_features / IMPORTANT below).
 Edit the CONFIG dict to point at a different jetson version / foundation ckpt.
 
 LEAKAGE GUARD: when npy_version is the SAME version the checkpoints were trained
@@ -61,17 +63,17 @@ from utils import Preprocess4Normalization, set_seeds
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/bench_04"),
-    "gru_subdir": "bench_gru_jetson_leg_10_20_both_01_xyz_pocket",
-    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_01_xyz_pocket",
-    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_01_xyz_pocket",
+    "run_dir": Path("saved/history/7CLS/bench_run68"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_02_xyz_leg",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_02_xyz_leg",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_02_xyz_both",
 
-    # class space + seq_len / sr / dim
+    # class space + seq_len / sr / dimindo
     "dataset": "jetson_leg",
-    "dataset_version": "10_20_both_01_xyz_leg",  
+    "dataset_version": "10_20_both_01_xyz_pocket_7cls", 
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
-    "dcnn_version": "v1",                 # dcnn_v1 in config/classifier.json
+    "dcnn_version": "v1",                 # dcnn_v1 in config/classifier.json:
     "deepsense_version": "v1",            # deepsense_v1 in config/classifier.json
 
     # foundation BERT that produced the separated-head training embeddings
@@ -79,7 +81,7 @@ CONFIG = {
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
-    "npy_version": "10_20_both_01_xyz_leg",
+    "npy_version": "10_20_both_01_xyz_pocket_7cls",
 
     # split geometry used by the benchmark run that produced the checkpoints;
     # needed to reconstruct each seed's held-out test split (leakage guard)
@@ -137,6 +139,16 @@ def remap_gt_by_name(gt_jetson, id_to_name, label_names):
 def normalize_windows(data, feature_count):
     norm = Preprocess4Normalization(feature_count)
     return np.stack([norm(s) for s in data], axis=0).astype(np.float32)
+
+
+def fft_features(norm):
+    """IMPORTANT: DeepSense trains on FFTDataset, not IMUDataset (benchmark.py
+    branches on method == 'deepsense'), so it never sees a raw window. Mirror
+    utils.FFTDataset.preprocess exactly -- fft over the time axis with n=10, then
+    concat magnitude and phase along that axis -- or the model scores at chance.
+    """
+    f = np.fft.fft(norm, axis=1, n=10)
+    return np.concatenate([np.abs(f), np.angle(f)], axis=1).astype(np.float32)
 
 
 # -----------------------------------------------------------------------------
@@ -312,13 +324,14 @@ def main():
         s = print_family("DCNN (supervised, no BERT)", rows)
         if s: summary.append(("DCNN", s))
 
-    # 1c. supervised DeepSense
+    # 1c. supervised DeepSense (fft features, NOT the raw window -- see fft_features)
     if deepsense_cfg is not None:
         deepsense_dir = run / cfg["gru_subdir"].replace("bench_gru_", "bench_deepsense_", 1)
+        norm_fft = fft_features(norm)
         rows = []
         for ck in sorted(deepsense_dir.glob("DeepSense__*.pt")):
             sel = eval_selector(ck.name)
-            preds = predict_supervised(masked(norm, sel), ck, deepsense_cfg, label_num, bs, device, method="deepsense")
+            preds = predict_supervised(masked(norm_fft, sel), ck, deepsense_cfg, label_num, bs, device, method="deepsense")
             rows.append((ck.name, *score(preds, masked(gt_model, sel), label_num)))
         s = print_family("DeepSense (supervised, no BERT)", rows)
         if s: summary.append(("DeepSense", s))

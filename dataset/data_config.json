@@ -499,7 +499,7 @@
         "model_label_size": 0,
         "size": 816
     },
-    "jetson_leg_10_20_both_01_xyz_leg_old": {
+    "jetson_leg_10_20_both_01_xyz_leg_7cls": {
         "sr": 10,
         "seq_len": 20,
         "dimension": 6,
@@ -524,7 +524,7 @@
         "size": 822
     },
 
-    "jetson_leg_10_20_both_01_xyz_pocket_old": {
+    "jetson_leg_10_20_both_01_xyz_pocket_7cls": {
         "sr": 10,
         "seq_len": 20,
         "dimension": 6,
@@ -603,6 +603,62 @@
         "model_label_index": -1,
         "model_label_size": 0,
         "size": 902
+    },
+    "jetson_leg_10_20_01_xyz_leg": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 11,
+        "activity_label": [
+            "stand",
+            "walk",
+            "turn",
+            "jog",
+            "rampascent",
+            "stairascent",
+            "stairdescent",
+            "sit",
+            "sit-to-stand",
+            "stand-to-sit",
+            "rampdescent"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 1,
+        "user_label": [
+            "AB01"
+        ],
+        "model_label_index": -1,
+        "model_label_size": 0,
+        "size": 512
+    },
+    "jetson_leg_10_20_01_xyz_pocket": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 11,
+        "activity_label": [
+            "stand",
+            "walk",
+            "turn",
+            "jog",
+            "rampascent",
+            "stairascent",
+            "stairdescent",
+            "sit",
+            "sit-to-stand",
+            "stand-to-sit",
+            "rampdescent"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 1,
+        "user_label": [
+            "AB01"
+        ],
+        "model_label_index": -1,
+        "model_label_size": 0,
+        "size": 451
     },
       "jetson_leg_10_20_both_02_xyz_leg": {
         "sr": 10,
@@ -734,6 +790,64 @@
         "model_label_index": -1,
         "model_label_size": 0,
         "size": 1710
+    },
+
+    "jetson_leg_10_20_0102_xyz_both": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 11,
+        "activity_label": [
+            "stand",
+            "walk",
+            "turn",
+            "jog",
+            "rampascent",
+            "stairascent",
+            "stairdescent",
+            "sit",
+            "sit-to-stand",
+            "stand-to-sit",
+            "rampdescent"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 2,
+        "user_label": [
+            "AB01",
+            "AB02"
+        ],
+        "model_label_index": -1,
+        "model_label_size": 0,
+        "size": 2023
+    },
+    "jetson_leg_10_20_01_xyz_both": {
+        "sr": 10,
+        "seq_len": 20,
+        "dimension": 6,
+        "activity_label_index": 0,
+        "activity_label_size": 11,
+        "activity_label": [
+            "stand",
+            "walk",
+            "turn",
+            "jog",
+            "rampascent",
+            "stairascent",
+            "stairdescent",
+            "sit",
+            "sit-to-stand",
+            "stand-to-sit",
+            "rampdescent"
+        ],
+        "user_label_index": 1,
+        "user_label_size": 1,
+        "user_label": [
+            "AB01"
+        ],
+        "model_label_index": -1,
+        "model_label_size": 0,
+        "size": 963
     },
 
         "jetson_leg_10_20_both_0102_xyz_pocket": {
