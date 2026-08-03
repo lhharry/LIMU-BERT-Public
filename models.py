@@ -586,7 +586,7 @@ def fetch_classifier(method, model_cfg, input=None, output=None, feats=False):
         model = ClassifierCNN1D(model_cfg, output=output)
     elif 'deepsense' in method:
         model = BenchmarkDeepSense(model_cfg, input=input, output=output)
-    elif 'attn':
+    elif 'attn' in method:
         model = ClassifierAttn(model_cfg, input=input, output=output)
     else:
         model = None

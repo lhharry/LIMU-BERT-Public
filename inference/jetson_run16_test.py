@@ -63,25 +63,25 @@ from utils import Preprocess4Normalization, set_seeds
 # Config
 # -----------------------------------------------------------------------------
 CONFIG = {
-    "run_dir": Path("saved/history/7CLS/bench_run68"),
-    "gru_subdir": "bench_gru_jetson_leg_10_20_both_02_xyz_leg",
-    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_02_xyz_leg",
-    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_02_xyz_both",
+    "run_dir": Path("saved/history/bench_53"),
+    "gru_subdir": "bench_gru_jetson_leg_10_20_both_0103_xyz_both",
+    "bert_subdir": "bert_classifier_base_gru_jetson_leg_10_20_both_0103_xyz_both",
+    "sep_subdir": "classifier_base_gru_jetson_leg_10_20_both_0103_xyz_both",
 
     # class space + seq_len / sr / dimindo
     "dataset": "jetson_leg",
-    "dataset_version": "10_20_both_01_xyz_pocket_7cls", 
+    "dataset_version": "10_20_both_0103_xyz_both",
     "bert_version": "v3",                 # base_v3 in config/limu_bert.json
     "classifier_version": "v3",           # gru_v3 in config/classifier.json
-    "dcnn_version": "v1",                 # dcnn_v1 in config/classifier.json:
+    "dcnn_version": "v1",                 # dcnn_v1 in config/classifier.json
     "deepsense_version": "v1",            # deepsense_v1 in config/classifier.json
 
     # foundation BERT that produced the separated-head training embeddings
-    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls_align/limu_bert_x_align_dapt_5e-4_3200_seed3431.pt"),
+    "foundation_ckpt": Path("saved/pretrain_base_merged_10_20_9cls/limu_bert_x_9cls_dapt_5e-4_3200_seed3431.pt"),
 
     # unseen jetson leg NPY (camargo axis order -> *_xyz variant matches training)
     "npy_dir": Path("dataset/jetson_leg"),
-    "npy_version": "10_20_both_01_xyz_pocket_7cls",
+    "npy_version": "10_20_both_02_xyz_leg",
 
     # split geometry used by the benchmark run that produced the checkpoints;
     # needed to reconstruct each seed's held-out test split (leakage guard)
@@ -259,7 +259,13 @@ def main():
     # Leakage guard: if the npy is the very version the checkpoints trained on,
     # ~80% of these windows sat in each model's training set. Restrict scoring
     # to the per-seed held-out test split in that case.
-    trained_suffix = f"{cfg['dataset']}_{cfg['npy_version']}"
+    # The npy DIRECTORY is part of the npy's identity, not just the version
+    # string: dataset/jetson_leg_test/ holds test-only rebuilds that can carry
+    # the very same version string as a training npy in dataset/jetson_leg/
+    # (e.g. 10_20_both_01_xyz_pocket). Keying the guard on the directory name
+    # keeps the old dataset/jetson_leg/ behaviour identical while never
+    # mistaking a test-only npy for the checkpoints' training data.
+    trained_suffix = f"{Path(cfg['npy_dir']).name}_{cfg['npy_version']}"
     mask_mode = cfg["gru_subdir"].endswith(trained_suffix)
     test_idx_cache = {}
 

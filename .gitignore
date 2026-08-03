@@ -33,6 +33,7 @@ saved/bert_classifier_base_gru_camargo_20_120/
 benchmark_results/logs/
 benchmark_results/history/
 benchmark_results/plots/
+benchmark_results/batch_analyse/
 benchmark_results/results/*.json
 saved/bench*
 saved/history

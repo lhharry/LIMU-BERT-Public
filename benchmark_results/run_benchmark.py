@@ -41,8 +41,15 @@ DATASET_VERSION = "10_20_both_xyz_pocket"
 MODEL_VERSION = "v3"
 TRAINING_RATE = 0.8
 SEEDS = [3431, 42, 2026]
-# LABEL_RATES = [0.002 , 0.005, 0.01, 0.02, 0.1, 0.2]
-LABEL_RATES = [0.05, 0.1, 0.3, 0.5, 0.8, 1.0]
+DATASET = "jetson_leg"
+DATASET_VERSION = "10_20_both_0103_xyz_both"
+MODEL_VERSION = "v3"
+TRAINING_RATE = 0.8
+SEEDS = [3431, 42, 2026]
+# LABEL_RATES = [0.002 , 0.005, 0.01, 0.02, 0.1, 0.2]   # paper standard
+# LABEL_RATES = [0.01 , 0.02, 0.04, 0.05, 0.1, 0.2]     # 2x single subject
+# LABEL_RATES = [0.02, 0.05, 0.08, 0.1, 0.2, 0.3]       # single subject
+LABEL_RATES = [0.005 , 0.01, 0.02, 0.03, 0.05, 0.1]     # 4x single subject
 
 # Which label column to predict. 0 = activity for camargo (see
 # dataset/data_config.json:86). Do NOT use -1 here: in some configs that index
