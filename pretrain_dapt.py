@@ -16,6 +16,20 @@ in run_benchmark.py (bert run with --seed S loads ..._seed{S}.pt).
 The 10% test split is never returned by prepare_pretrain_dataset, so it is fully
 held out; only the 80% train (optimized) + 10% vali (best-model selection) are used.
 
+That seed/split pairing only matters when the SSL set and the classifier read the
+SAME npy. For a DISJOINT unlabeled set -- e.g. the carve-out written by
+dataset/carve_ssl_split.py, whose windows are removed from the classifier's pool
+outright -- no split has to line up and --training_rate 0.9 should be used so no
+carved window is wasted.
+
+Checkpoint naming
+-----------------
+--out_name must keep the shape `limu_bert_x_<variant>_dapt_<lr>_<steps>`, with
+<variant> alphanumeric: the scoring chain parses the product filename with
+benchmark_results/batch_analyse/holdout_runs.PRETRAIN_RE to recover which backbone
+a bench was finetuned from, and the `separated` family cannot be scored at all if
+that lookup fails.
+
 Usage (run on the server, alongside pretrain.py):
   python pretrain_dapt.py v3 camargo 10_20_dense_8cls \
       -f saved/bertx/limu_bert_x \
@@ -25,6 +39,14 @@ python pretrain_dapt.py v3 merged 10_20_9cls \
       -f saved/bertx/limu_bert_x --num_workers 8 --batch_size 1024 \
       --seeds 3431 --dapt_epochs 3200 --dapt_lr 1e-4 -g 0 --out_name limu_bert_x_9cls_dapt_1e-4_3200 \
       2>&1 | tee saved/bertx/limu_bert_x_9cls_dapt_1e-4_3200.log
+
+Continued pretraining on a disjoint carve-out (1320 windows -> ~10 steps/epoch at
+batch 128; do NOT reuse the 5e-4 of the 46k-window merged DAPT here):
+
+python pretrain_dapt.py v3 jetson_leg 10_20_both_01030405_xyz_both_ssl30 \
+      -f saved/pretrain_base_merged_10_20_9cls_align/limu_bert_x_align_dapt_5e-4_3200_seed3431 \
+      --seeds 3431 --training_rate 0.9 --batch_size 128 --num_workers 4 \
+      --dapt_epochs 1500 --dapt_lr 1e-4 --out_name limu_bert_x_ssl30_dapt_1e-4_1500 -g 0
 
 Output: saved/pretrain_base_<dataset>_<version>/<out_name>_seed<seed>.pt
 """
@@ -54,11 +76,14 @@ def parse_args():
     p = argparse.ArgumentParser(description="LIMU-BERT domain-adaptive continued pretraining")
     # Positional args mirror handle_argv (pretrain.py) so configs resolve identically.
     p.add_argument("model_version", type=str, help="BERT config version, e.g. v3 (-> base_v3)")
+    # No choices= on either: build_io resolves both against dataset/data_config.json
+    # and config/limu_bert.json and exits with the offending key, so a whitelist here
+    # would only be a second list to keep in sync (it already excluded jetson_leg).
     p.add_argument("dataset", type=str,
-                   choices=["hhar", "motion", "uci", "shoaib", "camargo", "merged"])
+                   help="dataset name, e.g. merged or jetson_leg (must have a "
+                        "<dataset>_<dataset_version> entry in dataset/data_config.json)")
     p.add_argument("dataset_version", type=str,
-                   choices=["10_100", "20_120", "10_20", "10_60", "10_20_dense",
-                            "10_20_dense_8cls", "10_20_9cls_align"])
+                   help="e.g. 10_20_9cls_align, or 10_20_both_01030405_xyz_both_ssl30")
     p.add_argument("-f", "--model_file", type=str, required=True,
                    help="Starting checkpoint to continue from, e.g. saved/bertx/limu_bert_x "
                         "(a trailing .pt is optional).")
@@ -69,7 +94,12 @@ def parse_args():
     p.add_argument("--seeds", type=str, default="3431,42,2026",
                    help="Comma-separated seeds; one ckpt per seed, aligned with benchmark seeds.")
     p.add_argument("--training_rate", type=float, default=0.8,
-                   help="Must match benchmark TRAINING_RATE so the test split aligns.")
+                   help="Must match benchmark TRAINING_RATE when the SSL set and the "
+                        "classifier share ONE npy (that is what keeps the benchmark's "
+                        "10%% test split unseen). When the SSL set is a disjoint npy -- "
+                        "e.g. the carve-out from dataset/carve_ssl_split.py -- there is "
+                        "nothing to align, so pass 0.9 to spend every carved window "
+                        "(vali_rate is hardcoded at 0.1, so 0.8 silently discards 10%%).")
     p.add_argument("--dapt_epochs", type=int, default=200,
                    help="Continued-pretraining epochs (fewer than from-scratch; we adapt, not learn).")
     p.add_argument("--dapt_lr", type=float, default=1e-4,

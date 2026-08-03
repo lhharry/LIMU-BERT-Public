@@ -78,9 +78,14 @@ LIMU_BERTX_CKPT = os.path.join(
 # just edit the string below — every entry has its own model_version field.
 RUNS = [
     # --- Supervised baselines (no pretraining) ---
+    # R-GRU is not optional if the sweep will be scored on a held-out subject:
+    # holdout_runs.REQUIRED_FAMILIES needs the bench_gru_* subdir to resolve the run at
+    # all, and holdout_report.pair() drops any cell without an rgru row because there is
+    # no baseline left to form a paired difference against.
+    # DCNN/DeepSense stay off: the DeepSense row is a known FFT harness bug.
     # {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
     # {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
-    # {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
+    {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
     # --- LIMU-BERT-X foundation model + GRU head ---
     # bert_version pinned to v3 so joint runs match the separated path and
     # inference/test_csv.py. classifier_version swappable (v1 = paper-ish,
@@ -218,6 +223,15 @@ def main():
     ap.add_argument("--model_version", default=None,
                     help="Override MODEL_VERSION for every run in this invocation. "
                          "BERT mode wants <bert_v>_<classifier_v>, e.g. 'v3_v1'.")
+    ap.add_argument("--dataset_version", default=None,
+                    help="Override DATASET_VERSION for every run in this invocation, "
+                         "e.g. '10_20_both_01030405_xyz_both_rest30'.")
+    ap.add_argument("--bertx_ckpt", default=None,
+                    help="Override the foundation checkpoint for every pretrained run. "
+                         "Takes a path (config.create_io_config uses it verbatim once it "
+                         "contains a separator). Supervised rows are left alone. Pair with "
+                         "--dataset_version to run two backbones over identical labelled "
+                         "data without editing the module constants between sweeps.")
     args = ap.parse_args()
 
     run_id_name = args.run_id.strip()
@@ -239,6 +253,17 @@ def main():
         runs = [r for r in RUNS if any(k in r["tag"] for k in keys)]
     if args.model_version is not None:
         runs = [{**r, "model_version": args.model_version} for r in runs]
+    if args.dataset_version is not None:
+        runs = [{**r, "dataset_version": args.dataset_version} for r in runs]
+    if args.bertx_ckpt is not None:
+        # Only rows that already load a foundation model; adding pretrain_model to a
+        # supervised row would send bench_eval a checkpoint its method cannot consume.
+        runs = [{**r, "pretrain_model": args.bertx_ckpt} if r.get("pretrain_model") else r
+                for r in runs]
+        touched = sum(1 for r in runs if r.get("pretrain_model") == args.bertx_ckpt)
+        print(f"--bertx_ckpt: {touched}/{len(runs)} runs repointed to {args.bertx_ckpt}")
+    if not runs:
+        raise SystemExit(f"--only {args.only!r} matched no run tags in RUNS")
 
     summary_path = os.path.join(result_dir, "summary.csv")
     write_header = not os.path.exists(summary_path)
