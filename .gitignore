@@ -37,7 +37,8 @@ benchmark_results/batch_analyse/
 benchmark_results/results/*.json
 saved/bench*
 saved/history
-
+saved/best
+eval/
 # ssl related files
 ssl_compare/logs/
 ssl_compare/history/

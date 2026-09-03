@@ -37,19 +37,16 @@ REPO_ROOT = os.path.dirname(HERE)
 # ---------------------------------------------------------------------------
 
 DATASET = "jetson_leg"
-DATASET_VERSION = "10_20_both_xyz_pocket"
-MODEL_VERSION = "v3"
-TRAINING_RATE = 0.8
-SEEDS = [3431, 42, 2026]
-DATASET = "jetson_leg"
-DATASET_VERSION = "10_20_both_0103_xyz_both"
+DATASET_VERSION = "10_20_both_01030405_xyz_leg"
 MODEL_VERSION = "v3"
 TRAINING_RATE = 0.8
 SEEDS = [3431, 42, 2026]
 # LABEL_RATES = [0.002 , 0.005, 0.01, 0.02, 0.1, 0.2]   # paper standard
 # LABEL_RATES = [0.01 , 0.02, 0.04, 0.05, 0.1, 0.2]     # 2x single subject
 # LABEL_RATES = [0.02, 0.05, 0.08, 0.1, 0.2, 0.3]       # single subject
-LABEL_RATES = [0.005 , 0.01, 0.02, 0.03, 0.05, 0.1]     # 4x single subject
+# LABEL_RATES = [0.005 , 0.01, 0.02, 0.03, 0.05, 0.1]   # 4x single subject
+LABEL_RATES = [0.002, 0.005, 0.01, 0.03, 0.08, 0.1, 0.2]        # 3/4 subjects
+LABEL_RATES = [0.004, 0.01, 0.02, 0.06, 0.1, 0.2, 0.4] 
 
 # Which label column to predict. 0 = activity for camargo (see
 # dataset/data_config.json:86). Do NOT use -1 here: in some configs that index
@@ -67,7 +64,7 @@ BALANCE = 1
 # Path to the LIMU-BERT-X foundation-model checkpoint to use.
 # Adjust if you want a different pretrained file.
 LIMU_BERTX_CKPT = os.path.join(
-    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x_9cls_dapt_5e-4_3200_seed3431.pt"
+    "saved", "pretrain_base_" + DATASET + "_" + DATASET_VERSION, "limu_bert_x_align_dapt_5e-4_3200_seed3431.pt"
 )
 
 # model_version convention:
@@ -83,8 +80,8 @@ RUNS = [
     # all, and holdout_report.pair() drops any cell without an rgru row because there is
     # no baseline left to form a paired difference against.
     # DCNN/DeepSense stay off: the DeepSense row is a known FFT harness bug.
-    # {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
-    # {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
+    {"tag": "DCNN",        "mode": "supervised", "method": "dcnn",      "model_version": "v1"},
+    {"tag": "DeepSense",   "mode": "supervised", "method": "deepsense", "model_version": "v1"},
     {"tag": "R-GRU",       "mode": "supervised", "method": "gru",       "model_version": "v3"},
     # --- LIMU-BERT-X foundation model + GRU head ---
     # bert_version pinned to v3 so joint runs match the separated path and
@@ -93,9 +90,9 @@ RUNS = [
     # {"tag": "LIMU-BERT-X+GRU (frozen)",
     #  "mode": "bert", "method": "base_gru", "model_version": "v3_v3",
     #  "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 1},
-    {"tag": "LIMU-BERT-X+GRU (finetune)",
-     "mode": "bert", "method": "base_gru", "model_version": "v3_v3",
-     "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0},
+    # {"tag": "LIMU-BERT-X+GRU (finetune)",
+    #  "mode": "bert", "method": "base_gru", "model_version": "v3_v3",
+    #  "pretrain_model": LIMU_BERTX_CKPT, "frozen_bert": 0},
     # Same finetune path, but effective lr = 1e-4 * lr_scale = 1e-3.
     {"tag": "LIMU-BERT-X+GRU (finetune-high-lr)",
      "mode": "bert", "method": "base_gru", "model_version": "v3_v3",
@@ -103,9 +100,9 @@ RUNS = [
     # Separated mode: BERT runs in eval/no_grad as a frozen feature extractor
     # (same as inference/test_csv.py), embeddings are cached in memory, then a
     # standalone GRU head is trained via classifier.classify_embeddings.
-    {"tag": "LIMU-BERT-X+GRU (separated)",
-     "mode": "bert_separated", "method": "gru", "model_version": "v3",
-     "pretrain_model": LIMU_BERTX_CKPT},
+    # {"tag": "LIMU-BERT-X+GRU (separated)",
+    #  "mode": "bert_separated", "method": "gru", "model_version": "v3",
+    #  "pretrain_model": LIMU_BERTX_CKPT},
 ]
 
 
